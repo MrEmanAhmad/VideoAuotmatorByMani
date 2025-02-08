@@ -43,13 +43,24 @@ You can also set up your Railway environment by creating a `railway.json` file w
 
 ```json
 {
-  "OPENAI_API_KEY": "sk-your-openai-api-key",
-  "DEEPSEEK_API_KEY": "sk-your-deepseek-api-key",
+  "OPENAI_API_KEY": "your-openai-api-key",
+  "DEEPSEEK_API_KEY": "your-deepseek-api-key",
   "CLOUDINARY_CLOUD_NAME": "your-cloud-name",
-  "CLOUDINARY_API_KEY": "your-cloudinary-api-key",
-  "CLOUDINARY_API_SECRET": "your-cloudinary-secret",
-  "TELEGRAM_BOT_TOKEN": "1234567890:AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPPQQr",
-  "GOOGLE_APPLICATION_CREDENTIALS_JSON": "{\"type\":\"service_account\",\"project_id\":\"your-project-id\",\"private_key_id\":\"your-key-id\",\"private_key\":\"-----BEGIN PRIVATE KEY-----\\nYour-Private-Key\\n-----END PRIVATE KEY-----\\n\",\"client_email\":\"your-service-account@your-project.iam.gserviceaccount.com\",\"client_id\":\"your-client-id\",\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"token_uri\":\"https://oauth2.googleapis.com/token\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\",\"client_x509_cert_url\":\"https://www.googleapis.com/robot/v1/metadata/x509/your-service-account@your-project.iam.gserviceaccount.com\",\"universe_domain\":\"googleapis.com\"}"
+  "CLOUDINARY_API_KEY": "your-api-key",
+  "CLOUDINARY_API_SECRET": "your-api-secret",
+  "TELEGRAM_BOT_TOKEN": "your-telegram-bot-token",
+  "GOOGLE_APPLICATION_CREDENTIALS_JSON": {
+    "type": "service_account",
+    "project_id": "your-project-id",
+    "private_key_id": "your-key-id",
+    "private_key": "your-private-key",
+    "client_email": "your-service-account@your-project.iam.gserviceaccount.com",
+    "client_id": "your-client-id",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account@your-project.iam.gserviceaccount.com"
+  }
 }
 ```
 

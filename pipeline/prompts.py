@@ -25,6 +25,8 @@ class PromptTemplate:
 class PromptManager:
     """Manager for handling prompts and LLM interactions."""
     
+    DEEPSEEK_API_ENDPOINT = "https://api.deepseek.com/v1/chat/completions"
+    
     def __init__(self, provider: LLMProvider = LLMProvider.OPENAI):
         """Initialize the prompt manager with a specific provider."""
         self.provider = provider
@@ -45,7 +47,7 @@ class PromptManager:
                 self.api_key = os.getenv("DEEPSEEK_API_KEY")
                 if not self.api_key:
                     raise ValueError("DEEPSEEK_API_KEY environment variable not set")
-                self.api_url = "https://api.deepseek.com/v1/chat/completions"
+                self.api_url = os.getenv("DEEPSEEK_API_URL", self.DEEPSEEK_API_ENDPOINT)
         except Exception as e:
             logger.error(f"Error setting up {self.provider.value} client: {str(e)}")
             raise
