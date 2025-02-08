@@ -52,28 +52,23 @@ You can also set up your Railway environment by creating a `railway.json` file w
   "GOOGLE_APPLICATION_CREDENTIALS_JSON": {
     "type": "service_account",
     "project_id": "your-project-id",
-    "private_key_id": "your-key-id",
-    "private_key": "your-private-key",
-    "client_email": "your-service-account@your-project.iam.gserviceaccount.com",
+    "private_key_id": "your-private-key-id",
+    "private_key": "your-private-key-content",
+    "client_email": "service-account-name@project-id.iam.gserviceaccount.com",
     "client_id": "your-client-id",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account@your-project.iam.gserviceaccount.com"
+    "auth_uri": "[AUTH_URI]",
+    "token_uri": "[TOKEN_URI]",
+    "auth_provider_x509_cert_url": "[CERT_URL]",
+    "client_x509_cert_url": "[CLIENT_CERT_URL]"
   }
 }
 ```
 
-To use this:
-1. Create a file named `railway.json` in your project root
-2. Copy the above template
-3. Replace all placeholder values with your actual credentials
-4. In Railway dashboard:
-   - Go to Variables tab
-   - Click "Import from File"
-   - Upload your `railway.json`
-
-Note: Make sure to keep your `railway.json` file secure and never commit it to version control.
+**Important Security Notes:**
+1. Replace all placeholder values with your actual credentials
+2. Never commit this file to version control
+3. Keep your API keys and credentials secure
+4. Use environment variables in production
 
 ## Google Cloud Setup
 
