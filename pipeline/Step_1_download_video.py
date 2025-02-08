@@ -60,27 +60,39 @@ class VideoDownloader:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         return {
-            'outtmpl': str(video_dir / f'video_{timestamp}.%(ext)s'),  # Simple timestamp-based filename
+            'outtmpl': str(video_dir / f'video_{timestamp}.%(ext)s'),
             'progress_hooks': [self._progress_hook],
             'verbose': True,
-            'writesubtitles': False,
-            'writeautomaticsub': False,
             'format': 'best',
             'nocheckcertificate': True,
             'ignoreerrors': False,
             'no_warnings': False,
             'extract_flat': False,
+            'cookiesfrombrowser': ('chrome',),  # Try to use Chrome cookies
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'Sec-Fetch-Dest': 'empty',
+                'Referer': 'https://twitter.com/',
+                'Origin': 'https://twitter.com'
             },
             'postprocessors': [{
                 'key': 'FFmpegVideoRemuxer',
                 'preferedformat': 'mp4'
             }],
-            'compat_opts': ['no-youtube-unavailable-videos']
+            'extractor_args': {
+                'twitter': {
+                    'api_key': None,  # Let yt-dlp handle API key internally
+                }
+            },
+            'compat_opts': {
+                'no-youtube-unavailable-videos',
+                'no-youtube-prefer-utc',
+                'no-twitter-fail-incomplete'
+            }
         }
     
     def _progress_hook(self, d: Dict[str, Any]) -> None:
