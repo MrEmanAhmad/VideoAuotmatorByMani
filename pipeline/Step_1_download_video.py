@@ -68,13 +68,12 @@ class VideoDownloader:
             'ignoreerrors': False,
             'no_warnings': False,
             'extract_flat': False,
-            'cookiesfrombrowser': ('chrome',),  # Try to use Chrome cookies
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                 'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
+                'Sec-Fetch-Site': 'cross-site',
                 'Sec-Fetch-Dest': 'empty',
                 'Referer': 'https://twitter.com/',
                 'Origin': 'https://twitter.com'
@@ -85,7 +84,7 @@ class VideoDownloader:
             }],
             'extractor_args': {
                 'twitter': {
-                    'api_key': None,  # Let yt-dlp handle API key internally
+                    'api_key': None  # Let yt-dlp handle API key internally
                 }
             },
             'compat_opts': {
