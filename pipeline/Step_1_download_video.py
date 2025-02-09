@@ -72,9 +72,9 @@ class VideoDownloader:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                 'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Mode': 'navigate',
                 'Sec-Fetch-Site': 'cross-site',
-                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Dest': 'document',
                 'Referer': 'https://twitter.com/',
                 'Origin': 'https://twitter.com'
             },
