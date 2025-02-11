@@ -27,10 +27,22 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     python3-dev \
     pkg-config \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+    curl \
+    unzip \
+    xvfb \
+    libxi6 \
+    libgconf-2-4 \
+    default-jdk \
+    && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
+    && CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d'.' -f1) \
+    && wget -q "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}" -O - | xargs -I{} wget -q "https://chromedriver.storage.googleapis.com/{}/chromedriver_linux64.zip" \
+    && unzip chromedriver_linux64.zip \
+    && mv chromedriver /usr/local/bin/ \
+    && chmod +x /usr/local/bin/chromedriver \
+    && rm chromedriver_linux64.zip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /root/.cache/*
@@ -50,6 +62,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 RUN mkdir -p /home/app_user/.streamlit \
     /home/app_user/.cache/yt-dlp \
     /home/app_user/.cache/youtube-dl \
+    /home/app_user/.cache/selenium \
     credentials \
     analysis_temp \
     sample_generated_videos \
@@ -65,25 +78,29 @@ COPY . .
 RUN chown -R app_user:app_user /app \
     /home/app_user/.streamlit \
     /home/app_user/.cache \
+    /home/app_user/.config \
     credentials \
     analysis_temp \
     sample_generated_videos \
-    /home/app_user/.config && \
+    /usr/local/bin/chromedriver && \
     chmod -R 755 /app pipeline && \
     chmod -R 777 credentials \
     analysis_temp \
     sample_generated_videos \
     /home/app_user/.config \
     /home/app_user/.streamlit \
-    /home/app_user/.cache
+    /home/app_user/.cache \
+    /usr/local/bin/chromedriver
 
 # Switch to non-root user
 USER app_user
 
-# Set Chrome configuration for non-root user
+# Set Chrome and Selenium configuration for non-root user
 ENV HOME=/home/app_user \
     CHROME_BIN=/usr/bin/google-chrome \
-    DISPLAY=:99
+    DISPLAY=:99 \
+    PYTHONPATH=${PYTHONPATH}:/app \
+    SELENIUM_CACHE_PATH=/home/app_user/.cache/selenium
 
 # Set Streamlit specific environment variables
 ENV LC_ALL=C.UTF-8 \

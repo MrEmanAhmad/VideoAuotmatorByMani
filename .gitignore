@@ -1,3 +1,10 @@
+# Sensitive files
+railway.json
+credentials/
+.env
+*.pem
+google_credentials.json
+
 # Python
 __pycache__/
 *.py[cod]
@@ -24,26 +31,37 @@ wheels/
 venv/
 env/
 ENV/
-.env
+.env/
+.venv/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+.DS_Store
+
+# Project specific
+analysis_temp/
+sample_generated_videos/
+*.mp4
+*.wav
+*.mp3
+*.avi
+temp_*/
+output_*/
 
 # Logs
 *.log
 logs/
 log/
 
-# Project specific
-credentials/
-railway.json
-.env.example
-*.mp4
-!sample_generated_videos/*.mp4
+# Chrome/Selenium
+.wdm/
+.chrome/
+chromedriver
+chromedriver.exe
 
-# System
-.DS_Store
-Thumbs.db 
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb 

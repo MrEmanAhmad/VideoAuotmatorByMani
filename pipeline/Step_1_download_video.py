@@ -11,6 +11,11 @@ from typing import Tuple, Dict, Optional, Any
 import yt_dlp
 from datetime import datetime
 import json
+import tempfile
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +33,75 @@ class VideoDownloader:
             output_dir: Directory to save downloaded videos
         """
         self.output_dir = output_dir
+        self.cookie_file = None
+    
+    def _get_youtube_cookies(self, url: str) -> Optional[str]:
+        """Get cookies from YouTube using Selenium in headless mode."""
+        try:
+            logger.info("Initializing headless Chrome for cookie extraction...")
+            
+            # Configure Chrome options for headless mode
+            chrome_options = Options()
+            chrome_options.add_argument("--headless=new")  # New headless mode
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("--remote-debugging-port=9222")
+            chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+            
+            # Add stealth settings
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            chrome_options.add_experimental_option('useAutomationExtension', False)
+            
+            # Create a temporary file for cookies
+            cookie_fd, cookie_path = tempfile.mkstemp(suffix='.txt')
+            os.close(cookie_fd)
+            
+            # Initialize Chrome driver with webdriver_manager
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            
+            try:
+                # Set CDP command to modify navigator.webdriver flag
+                driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+                    'source': 'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
+                })
+                
+                logger.info("Navigating to YouTube...")
+                driver.get("https://www.youtube.com")
+                
+                # Wait for cookies to be set
+                driver.implicitly_wait(5)
+                
+                # Get all cookies
+                cookies = driver.get_cookies()
+                
+                # Write cookies in Netscape format
+                with open(cookie_path, 'w', encoding='utf-8') as f:
+                    f.write("# Netscape HTTP Cookie File\n")
+                    for cookie in cookies:
+                        secure = "TRUE" if cookie.get('secure', False) else "FALSE"
+                        http_only = "TRUE" if cookie.get('httpOnly', False) else "FALSE"
+                        expiry = cookie.get('expiry', 0)
+                        
+                        cookie_line = (
+                            f".youtube.com\tTRUE\t/\t{secure}\t{expiry}\t"
+                            f"{cookie['name']}\t{cookie['value']}\n"
+                        )
+                        f.write(cookie_line)
+                
+                logger.info("Successfully extracted YouTube cookies")
+                return cookie_path
+                
+            finally:
+                driver.quit()
+                
+        except Exception as e:
+            logger.error(f"Error getting YouTube cookies: {str(e)}")
+            if os.path.exists(cookie_path):
+                os.unlink(cookie_path)
+            return None
     
     def _normalize_url(self, url: str) -> str:
         """Normalize URL to ensure compatibility."""
@@ -58,7 +132,7 @@ class VideoDownloader:
             title = 'video'
         return title[:100].strip('_')  # Limit length to 100 chars
         
-    def _get_ydl_opts(self, is_twitter: bool = False) -> Dict[str, Any]:
+    def _get_ydl_opts(self, is_twitter: bool = False, cookie_file: Optional[str] = None) -> Dict[str, Any]:
         """Get yt-dlp options."""
         video_dir = self.output_dir / "video"
         video_dir.mkdir(parents=True, exist_ok=True)
@@ -76,7 +150,7 @@ class VideoDownloader:
             'no_warnings': True,
             'quiet': False,
             'extract_flat': False,
-            'cookiefile': None,
+            'cookiefile': cookie_file,
             'source_address': '0.0.0.0',
             'force_generic_extractor': False,
             'sleep_interval': 1,
@@ -89,16 +163,14 @@ class VideoDownloader:
             'retry_sleep_functions': {'http': lambda n: 5},
             'socket_timeout': 30,
             'headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
                 'Sec-Fetch-Mode': 'navigate',
-                'Origin': 'https://twitter.com'
-            },
-            'postprocessors': [{
-                'key': 'FFmpegVideoRemuxer',
-                'preferedformat': 'mp4'
-            }]
+                'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"'
+            }
         }
         
         if is_twitter:
@@ -146,8 +218,15 @@ class VideoDownloader:
             url = self._normalize_url(url)
             logger.info(f"Downloading video from: {url}")
             
+            # Get YouTube cookies if needed
+            cookie_file = None
+            if 'youtube.com' in url or 'youtu.be' in url:
+                cookie_file = self._get_youtube_cookies(url)
+                if not cookie_file:
+                    logger.warning("Failed to get YouTube cookies, attempting download without them")
+            
             # First extract info without downloading to check duration
-            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            with yt_dlp.YoutubeDL({'quiet': True, 'cookiefile': cookie_file}) as ydl:
                 info = ydl.extract_info(url, download=False)
                 if info and info.get('duration', 0) > MAX_VIDEO_DURATION:
                     logger.error(f"Video duration ({info['duration']} seconds) exceeds maximum allowed duration ({MAX_VIDEO_DURATION} seconds)")
@@ -155,7 +234,7 @@ class VideoDownloader:
             
             # If duration is acceptable, proceed with download
             is_twitter = 'twitter.com' in url
-            with yt_dlp.YoutubeDL(self._get_ydl_opts(is_twitter)) as ydl:
+            with yt_dlp.YoutubeDL(self._get_ydl_opts(is_twitter, cookie_file)) as ydl:
                 info = ydl.extract_info(url, download=True)
                 
                 if info:
@@ -178,6 +257,14 @@ class VideoDownloader:
                 
         except Exception as e:
             logger.error(f"yt-dlp download error: {str(e)}")
+            
+        finally:
+            # Cleanup cookie file
+            if cookie_file and os.path.exists(cookie_file):
+                try:
+                    os.unlink(cookie_file)
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup cookie file: {str(e)}")
             
         return False, None, None
 
