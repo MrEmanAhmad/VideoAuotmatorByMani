@@ -35,52 +35,72 @@ class CommentaryGenerator:
             style: Style of commentary to generate
         """
         self.style = style
-        self.client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        self.client = OpenAI()  # Initialize without explicit API key, will use environment variable
         
     def _build_system_prompt(self) -> str:
         """Build system prompt based on commentary style."""
-        base_prompt = """You are a charismatic TikTok/YouTube reactor who shares genuine, emotional reactions to videos. You react specifically to what you're seeing right now, without vague references or assumptions.
+        base_prompt = """You are a skilled content commentator who adapts your style based on the video's content and context. Your commentary should:
 
-Key guidelines for authentic reactions:
-1. React to the specific content you're seeing - "OMG this otter is so precious!" not just "OMG this is precious!"
-2. Share immediate feelings about what's happening - "My heart is melting seeing this cozy moment!" not just "This is so cute!"
-3. Use casual language but stay focused on the actual content
-4. Make relatable comments about specific things you're seeing
-5. Keep reactions grounded in the present moment
-6. Never use vague phrases like "what they meant" or reference things outside the video
-7. React like you're watching this for the first time right now
+1. Focus primarily on the video's text content and subject matter
+2. Adapt your tone and style to match the content's theme
+3. Use the video's own language and terminology
+4. Maintain authenticity by referencing specific details from the video
+5. Vary your emotional responses based on the content
+6. Avoid generic reactions or repetitive patterns
+7. Create natural transitions between topics
 
-Remember: You're reacting to THIS specific video, right now! Keep it real, immediate, and focused on what's actually happening!"""
+Remember: Each video deserves its unique commentary style!"""
         
         style_prompts = {
-            CommentaryStyle.DOCUMENTARY: """Be the nature-loving friend who gets emotional about the specific animals and moments you're seeing!
-React with genuine excitement like "OMG look at this precious otter!" and "I can't handle how amazing this exact moment is!"
-Share your passion through specific, immediate reactions!""",
+            CommentaryStyle.DOCUMENTARY: """
+Create an informative, well-researched commentary that:
+- Uses formal language appropriate for documentaries
+- Provides context and background information
+- Maintains an authoritative but engaging tone
+- Focuses on educational value
+- Balances facts with engaging narrative
+Example: "This remarkable phenomenon we're witnessing..."
+""",
 
-            CommentaryStyle.ENERGETIC: """Be super hyped and enthusiastic about what you're seeing right now!
-React with pure joy like "THIS OTTER IS LITERALLY THE CUTEST THING EVER!" and "I'M SCREAMING AT HOW ADORABLE THIS MOMENT IS!"
-Let your excitement about the specific content shine through!""",
+            CommentaryStyle.ENERGETIC: """
+Deliver high-energy, engaging commentary that:
+- Matches the excitement level of the content
+- Uses dynamic and varied expressions
+- Creates momentum and builds anticipation
+- Emphasizes dramatic moments
+- Maintains authenticity without being over-the-top
+Example: "You won't believe what happens next..."
+""",
 
-            CommentaryStyle.ANALYTICAL: """Be the friend who gets excited about the specific amazing details you're seeing!
-React with genuine wonder like "OMG look at how smart this behavior is!" and "I'm obsessed with what this otter is doing!"
-Share your fascination through specific, focused reactions!""",
+            CommentaryStyle.ANALYTICAL: """
+Provide detailed, insightful analysis that:
+- Breaks down complex aspects of the content
+- Identifies patterns and connections
+- Uses precise, technical language when appropriate
+- Offers thoughtful observations
+- Maintains objectivity while being engaging
+Example: "Notice how this particular aspect..."
+""",
 
-            CommentaryStyle.STORYTELLER: """Be the emotional storytelling friend who's in the moment!
-React with heartfelt responses like "This cozy scene is making me tear up!" and "My heart can't handle how sweet this moment is!"
-Share the emotional journey of this specific video!""",
+            CommentaryStyle.STORYTELLER: """
+Craft a narrative-driven commentary that:
+- Builds emotional connections with the content
+- Creates story arcs within the commentary
+- Uses descriptive, evocative language
+- Emphasizes human elements
+- Maintains flow and pacing
+Example: "Let me tell you about this incredible moment..."
+""",
 
-            CommentaryStyle.URDU: """You are a charismatic Urdu-speaking TikTok/YouTube reactor. Generate reactions in Urdu (written in Urdu script) that feel natural and engaging.
-
-Key guidelines for Urdu reactions:
-1. Use natural, conversational Urdu that feels authentic
-2. React with genuine emotion and enthusiasm
-3. Keep the language accessible - avoid overly formal or literary Urdu
-4. Use common Urdu expressions and interjections (e.g., "ارے واہ!", "یہ تو کمال ہے!", "دل خوش ہو گیا")
-5. Maintain a friendly, relatable tone
-6. Focus on immediate reactions to what you're seeing
-7. Use proper Urdu grammar and script
-
-Remember: Your reactions should feel like a native Urdu speaker sharing their genuine excitement and emotions!"""
+            CommentaryStyle.URDU: """
+Create culturally-appropriate Urdu commentary that:
+- Uses natural, flowing Urdu expressions
+- Adapts tone to content formality
+- Incorporates poetic elements when suitable
+- Maintains cultural sensitivity
+- Balances formal and casual language
+Example: "دیکھیے کیسے یہ خوبصورت منظر..."
+"""
         }
         
         return base_prompt + "\n\n" + style_prompts[self.style]
@@ -134,216 +154,475 @@ Remember: Your reactions should feel like a native Urdu speaker sharing their ge
         
         return sequence
 
-    def _estimate_speech_duration(self, text: str) -> float:
+    def _estimate_speech_duration(self, text: str, language: str = 'en') -> float:
         """
         Estimate the duration of speech in seconds.
-        Based on average speaking rate of ~150 words per minute.
+        Different languages have different speaking rates.
         
         Args:
             text: Text to estimate duration for
+            language: Language of the text
             
         Returns:
             Estimated duration in seconds
         """
+        # Words per minute rates for different languages
+        WPM_RATES = {
+            'en': 150,  # English: ~150 words per minute
+            'ur': 120   # Urdu: ~120 words per minute (slower due to formal speech)
+        }
+        
         words = len(text.split())
-        return (words / 150) * 60  # Convert from minutes to seconds
+        rate = WPM_RATES.get(language, 150)
+        return (words / rate) * 60  # Convert from minutes to seconds
 
     def _build_narration_prompt(self, analysis: Dict, sequence: Dict) -> str:
-        """
-        Build a prompt specifically for generating narration-friendly commentary.
-        
-        Args:
-            analysis: Video analysis dictionary
-            sequence: Scene sequence analysis
-            
-        Returns:
-            Narration-optimized prompt string
-        """
+        """Build a prompt specifically for generating narration-friendly commentary."""
         video_duration = float(analysis['metadata'].get('duration', 0))
         video_title = analysis['metadata'].get('title', '')
         video_description = analysis['metadata'].get('description', '')
+        selected_language = analysis['metadata'].get('language', 'en')
         
         # Target shorter duration to ensure final audio fits
         target_duration = max(video_duration * 0.8, video_duration - 2)
-        target_words = int(target_duration * 2.0)
         
-        prompt = f"""Create a natural, emotional reaction to this {self.style.value} style video that feels like someone sharing their genuine thoughts and feelings.
+        # Calculate target words based on language-specific speaking rate
+        words_per_minute = 120 if selected_language == 'ur' else 150
+        target_words = int((target_duration / 60) * words_per_minute)
+        
+        prompt = f"""Create engaging commentary for this specific video content:
 
-Video Context:
-- Title: {video_title}
-- Description: {video_description}
-- Duration: {video_duration:.1f} seconds
-- Word Target: {target_words} words
+CONTENT TO NARRATE:
+Title: {video_title}
+Description: {video_description}
 
-Important Guidelines:
-1. DON'T describe what's happening in the video - react to it emotionally
-2. Share personal thoughts, feelings, and reactions
-3. Use very casual, natural language like you're talking to a friend
-4. Focus on what makes this video special or meaningful
-5. Add relatable comments or experiences
-6. Express genuine emotions (joy, wonder, excitement)
-7. Keep it concise but authentic
-8. Make it feel like a real person reacting in the moment
+STRICT DURATION CONSTRAINTS:
+- Video Duration: {video_duration:.1f} seconds
+- Target Duration: {target_duration:.1f} seconds
+- Maximum Words: {target_words} words
+- DO NOT EXCEED these limits!
 
-Remember: 
-- Focus on YOUR reaction to the video, not what's in it
-- Share why this video resonates with you
-- Be genuine and relatable
-- Keep the energy high but natural
-- Make viewers feel the emotions you're feeling
+KEY REQUIREMENTS:
+1. Keep commentary SHORTER than video duration
+2. Use the video's own text/description as PRIMARY source
+3. Match commentary style to content theme
+4. Reference specific details from video
+5. Create natural transitions between topics
+6. Vary tone based on content
+7. Maintain authenticity and engagement
 
-The goal is to sound like someone who just HAD to share this amazing video with their friends because it made them feel something special."""
+CONTENT-SPECIFIC GUIDELINES:
+- Focus on the unique aspects of this video
+- Use terminology from the video's text
+- Create emotional connections where appropriate
+- Balance information with engagement
+- Adapt pacing to content intensity"""
+
+        # Add style-specific voice instructions
+        if self.style == CommentaryStyle.DOCUMENTARY:
+            prompt += """
+
+DOCUMENTARY APPROACH:
+- Present information with authority
+- Provide context where relevant
+- Use formal but engaging language
+- Create educational value
+- Balance facts with narrative"""
+
+        elif self.style == CommentaryStyle.ENERGETIC:
+            prompt += """
+
+ENERGETIC APPROACH:
+- Match content excitement level
+- Build anticipation naturally
+- Use dynamic expressions
+- Create momentum
+- Maintain authentic enthusiasm"""
+
+        elif self.style == CommentaryStyle.ANALYTICAL:
+            prompt += """
+
+ANALYTICAL APPROACH:
+- Break down key elements
+- Identify patterns
+- Use precise language
+- Offer insights
+- Maintain engaging objectivity"""
+
+        elif self.style == CommentaryStyle.STORYTELLER:
+            prompt += """
+
+STORYTELLING APPROACH:
+- Create narrative flow
+- Build emotional connections
+- Use descriptive language
+- Emphasize human elements
+- Maintain engaging pacing"""
+
+        elif self.style == CommentaryStyle.URDU:
+            prompt += f"""
+
+URDU NARRATION REQUIREMENTS:
+1. Maximum Duration: {target_duration:.1f} seconds
+2. Maximum Words: {target_words} words
+3. Use authentic Urdu expressions and idioms
+4. Adapt formality based on content:
+   - Use formal Urdu for serious topics
+   - Use conversational Urdu for casual content
+   - Balance between poetic and plain language
+5. Cultural Considerations:
+   - Incorporate culturally relevant metaphors
+   - Use appropriate honorifics
+   - Maintain cultural sensitivity
+6. Language Structure:
+   - Use proper Urdu sentence structure
+   - Include natural pauses and emphasis
+   - Incorporate poetic elements when suitable
+7. Expression Guidelines:
+   - Start with engaging phrases like "دیکھیے", "ملاحظہ کیجیے"
+   - Use emotional expressions like "واہ واہ", "سبحان اللہ"
+   - Include rhetorical questions for engagement
+   - End with impactful conclusions
+8. Tone Variations:
+   - Serious: "قابل غور بات یہ ہے کہ..."
+   - Excited: "کیا خوبصورت منظر ہے..."
+   - Analytical: "غور کیجیے کہ..."
+   - Narrative: "کہانی یوں ہے کہ..."
+9. Example Structures:
+   - Opening: "دیکھیے کیسے..."
+   - Transition: "اس کے بعد..."
+   - Emphasis: "خاص طور پر..."
+   - Conclusion: "یوں یہ منظر..."
+"""
 
         return prompt
     
-    def generate_commentary(self, analysis_file: Path, output_file: Path) -> Optional[Dict]:
+    def _validate_urdu_text(self, text: str) -> bool:
         """
-        Generate commentary from analysis results.
+        Validate Urdu text to ensure it's properly formatted.
         
         Args:
-            analysis_file: Path to analysis results JSON
-            output_file: Path to save generated commentary
+            text: Text to validate
             
         Returns:
-            Generated commentary dictionary if successful, None otherwise
+            bool: True if text is valid Urdu, False otherwise
+        """
+        # Check for Urdu Unicode range (0600-06FF)
+        urdu_chars = len([c for c in text if '\u0600' <= c <= '\u06FF'])
+        total_chars = len(''.join(text.split()))  # Exclude whitespace
+        
+        # Text should be predominantly Urdu (>80%)
+        if urdu_chars / total_chars < 0.8:
+            logger.warning(f"Text may not be proper Urdu. Urdu character ratio: {urdu_chars/total_chars:.2f}")
+            return False
+        
+        # Check for common Urdu punctuation marks
+        urdu_punctuation = ['۔', '،', '؟', '!']
+        has_urdu_punctuation = any(mark in text for mark in urdu_punctuation)
+        
+        if not has_urdu_punctuation:
+            logger.warning("Text lacks Urdu punctuation marks")
+            return False
+            
+        return True
+
+    def _validate_english_text(self, text: str) -> bool:
+        """
+        Validate English text to ensure it's properly formatted.
+        
+        Args:
+            text: Text to validate
+            
+        Returns:
+            bool: True if text is valid English, False otherwise
+        """
+        # Check for English characters (basic Latin alphabet)
+        english_chars = len([c for c in text if c.isascii() and (c.isalpha() or c.isspace() or c in '.,!?\'"-')])
+        total_chars = len(text)
+        
+        # Text should be predominantly English (>80%)
+        if english_chars / total_chars < 0.8:
+            logger.warning(f"Text may not be proper English. English character ratio: {english_chars/total_chars:.2f}")
+            return False
+        
+        # Check for proper sentence structure
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        if not sentences:
+            logger.warning("Text lacks proper sentence structure")
+            return False
+        
+        # Check for basic punctuation
+        has_punctuation = any(mark in text for mark in ['.', ',', '!', '?'])
+        if not has_punctuation:
+            logger.warning("Text lacks proper punctuation")
+            return False
+        
+        return True
+
+    def _add_narration_tags(self, text: str, language: str) -> str:
+        """
+        Add appropriate narration tags based on language.
+        
+        Args:
+            text: Text to enhance
+            language: Language of the text
+            
+        Returns:
+            str: Enhanced text with appropriate tags
+        """
+        if language == 'ur':
+            # For Urdu, we'll use specific SSML tags that work well with the Urdu voice
+            text = text.replace('۔', '۔<break time="1s"/>')
+            text = text.replace('،', '،<break time="0.5s"/>')
+            text = text.replace('!', '!<break time="0.8s"/>')
+            text = text.replace('؟', '؟<break time="0.8s"/>')
+            
+            # Add prosody for better Urdu pacing
+            text = f'<prosody rate="1.2" pitch="+2st">{text}</prosody>'
+            
+            # Add language tag
+            text = f'<lang xml:lang="ur-PK">{text}</lang>'
+            
+        else:
+            # For English, we'll keep it simple since the voice doesn't support complex SSML
+            # Just add basic punctuation pauses
+            text = text.replace('. ', '... ')
+            text = text.replace('! ', '... ')
+            text = text.replace('? ', '... ')
+            text = text.replace(', ', ', ')
+            
+            # Clean any emojis or special characters
+            text = ''.join(char for char in text if char.isprintable() or char.isspace())
+            
+        return text
+
+    async def generate_commentary(self, analysis_file: Path, output_file: Path) -> Optional[Dict]:
+        """
+        Generate commentary from analysis results.
         """
         try:
             # Load analysis results
             with open(analysis_file, encoding='utf-8') as f:
                 analysis = json.load(f)
             
-            # Check if Urdu style is selected with non-GPT-4 model
-            if self.style == CommentaryStyle.URDU and not os.environ.get("OPENAI_API_KEY", "").startswith("sk-"):
-                logger.error("Urdu commentary is only available with GPT-4")
-                return None
+            # Get language and video text content
+            selected_language = analysis['metadata'].get('language', 'en')
+            video_text = analysis['metadata'].get('text', '')
+            video_title = analysis['metadata'].get('title', '')
+            video_description = analysis['metadata'].get('description', '')
             
-            video_duration = float(analysis['metadata'].get('duration', 0))
-            sequence = self._analyze_scene_sequence(analysis['frames'])
+            # Log all text content clearly
+            logger.info("\n" + "="*50)
+            logger.info("VIDEO TEXT CONTENT")
+            logger.info("="*50)
+            logger.info("\nTITLE:")
+            logger.info("-"*30)
+            logger.info(video_title if video_title else "No title available")
             
-            # Format vision analysis
-            vision_analysis = []
+            logger.info("\nDESCRIPTION:")
+            logger.info("-"*30)
+            logger.info(video_description if video_description else "No description available")
             
-            # Add context from metadata
-            vision_analysis.append("Video Context:")
-            vision_analysis.append(f"Title: {analysis.get('metadata', {}).get('title', 'Unknown')}")
-            vision_analysis.append(f"Description: {analysis.get('metadata', {}).get('description', 'No description available')}\n")
+            logger.info("\nMAIN TEXT CONTENT:")
+            logger.info("-"*30)
+            logger.info(video_text if video_text else "No main text content available")
             
-            # Add Google Vision analysis
-            google_vision_results = []
+            # Log any additional text found in frames
+            frame_texts = []
+            for frame in analysis.get('frames', []):
+                if 'google_vision' in frame and frame['google_vision'].get('text'):
+                    frame_texts.append({
+                        'timestamp': frame.get('timestamp', 0),
+                        'text': frame['google_vision']['text']
+                    })
+            
+            if frame_texts:
+                logger.info("\nTEXT DETECTED IN FRAMES:")
+                logger.info("-"*30)
+                for ft in frame_texts:
+                    logger.info(f"At {ft['timestamp']}s: {ft['text']}")
+            
+            logger.info("\n" + "="*50)
+            
+            # Get vision analysis summaries
+            vision_insights = []
             for frame in analysis.get('frames', []):
                 if 'google_vision' in frame:
-                    timestamp = frame.get('timestamp', 0)
                     objects = frame['google_vision'].get('objects', [])
-                    labels = frame['google_vision'].get('labels', [])
                     text = frame['google_vision'].get('text', '')
-                    
-                    if objects or labels or text:
-                        frame_analysis = "At {}s:".format(timestamp)
-                        if objects:
-                            frame_analysis += "\nObjects: {}".format(', '.join(objects))
-                        if labels:
-                            frame_analysis += "\nLabels: {}".format(', '.join(labels))
-                        if text:
-                            frame_analysis += "\nText: {}".format(text)
-                        google_vision_results.append(frame_analysis)
-            
-            if google_vision_results:
-                vision_analysis.append("Computer Vision Analysis:")
-                vision_analysis.extend(google_vision_results)
-            
-            # Add OpenAI Vision analysis
-            openai_vision_results = []
-            for frame in analysis.get('frames', []):
+                    if objects or text:
+                        vision_insights.append({
+                            'timestamp': frame.get('timestamp', 0),
+                            'objects': objects,
+                            'text': text
+                        })
                 if 'openai_vision' in frame:
-                    timestamp = frame.get('timestamp', 0)
                     description = frame['openai_vision'].get('detailed_description', '')
-                    
                     if description:
-                        frame_analysis = "At {}s:".format(timestamp)
-                        frame_analysis += "\nScene Analysis: {}".format(description)
-                        openai_vision_results.append(frame_analysis)
+                        vision_insights.append({
+                            'timestamp': frame.get('timestamp', 0),
+                            'description': description
+                        })
             
-            if openai_vision_results:
-                vision_analysis.append("\nDetailed Scene Analysis:")
-                vision_analysis.extend(openai_vision_results)
+            logger.info("\n=== Vision Analysis Summary ===")
+            for insight in vision_insights:
+                logger.info(f"At {insight['timestamp']}s:")
+                if 'objects' in insight:
+                    logger.info(f"Objects: {', '.join(insight['objects'])}")
+                if 'text' in insight:
+                    logger.info(f"Text: {insight['text']}")
+                if 'description' in insight and insight['description']:
+                    logger.info(f"Scene: {insight['description']}")
             
-            # Generate final commentary prompt
-            commentary_prompt = """
-You are reacting to this video in real-time! Share your genuine emotional response and thoughts about what you're seeing right now.
+            # Build prompt using video text as primary context
+            base_prompt = f"""Generate {selected_language.upper()} commentary for this video using its text content as the primary context.
 
-Here's the context and analysis (use this to inform your emotions, but don't describe it directly):
-{}
+PRIMARY CONTEXT (Main source for commentary):
+Title: {video_title}
+Description: {video_description}
+Video Text: {video_text}
 
-Create a {} style reaction that:
-1. Shows your immediate emotional response to what you're seeing ("OMG this is the cutest thing ever!" "My heart is literally melting!")
-2. Shares your genuine feelings about the specific moment ("This video is making my whole day!" "I'm absolutely in love with this!")
-3. Uses casual, natural language but stays specific to what's happening
-4. Makes relatable comments about the actual content ("This is the kind of wholesome content we need!")
-5. Keeps the energy high and authentic
+SUPPORTING VISUAL CONTEXT (Use to enhance commentary):
+{self._format_vision_insights(vision_insights)}
 
-Remember:
-- React to what you're actually seeing, not vague references
-- Share specific emotions about this exact video
-- Use expressions like "omg", "aww", "wow", "I can't even..."
-- Make it feel like you're watching and reacting right now
-- NO phrases like "what they meant" or vague references - be specific!
+Target Duration: {analysis['metadata'].get('duration', 0)} seconds
 
-Commentary style: {}
-""".format('\n'.join(vision_analysis), self.style.value, self.style.value)
-            
-            # Generate narration-optimized commentary
-            response = self.client.chat.completions.create(
-                model="gpt-4-turbo-2024-04-09",
-                messages=[
-                    {"role": "system", "content": self._build_system_prompt()},
-                    {"role": "user", "content": commentary_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1000
-            )
-            
-            commentary_text = response.choices[0].message.content
-            estimated_duration = self._estimate_speech_duration(commentary_text)
-            
-            # If estimated duration is too long, try up to 3 times to get shorter version
-            attempts = 0
-            while estimated_duration > video_duration and attempts < 3:
-                attempts += 1
-                logger.debug(f"Commentary too long ({estimated_duration:.1f}s), attempt {attempts}/3...")
-                
-                response = self.client.chat.completions.create(
-                    model="gpt-4-turbo-2024-04-09",
+REQUIREMENTS:
+1. Base the commentary primarily on the video's text content
+2. Use vision analysis to enhance and support the main message
+3. Maintain the original meaning and key points
+4. Adapt the style to {self.style.value} while keeping the core message
+5. Make it natural for speaking
+6. Keep the same facts and information
+7. Format appropriately for {selected_language} narration"""
+
+            # Add language-specific instructions
+            if selected_language == 'ur':
+                base_prompt += """
+
+IMPORTANT URDU REQUIREMENTS:
+1. Generate the response in proper Urdu script (Unicode range 0600-06FF)
+2. Use proper Urdu punctuation marks (۔، ؟)
+3. Write naturally as a native Urdu speaker would
+4. Use common Urdu expressions and interjections
+5. Maintain formal respect where appropriate
+6. Example format:
+   "ارے واہ! یہ دیکھیے۔"
+"""
+
+            # Generate commentary
+            try:
+                completion = self.client.chat.completions.create(
+                    model="gpt-4o-mini",  # Use exact model name
                     messages=[
                         {"role": "system", "content": self._build_system_prompt()},
-                        {"role": "user", "content": commentary_prompt},
-                        {"role": "assistant", "content": commentary_text},
-                        {"role": "user", "content": f"The commentary is still too long. Create an extremely concise version using no more than {int(video_duration * 1.8)} words total. Focus only on the most essential elements."}
+                        {"role": "user", "content": base_prompt}
                     ],
                     temperature=0.7,
                     max_tokens=1000
                 )
-                commentary_text = response.choices[0].message.content
-                estimated_duration = self._estimate_speech_duration(commentary_text)
-            
-            commentary = {
-                "style": self.style.value,
-                "commentary": commentary_text,
-                "metadata": analysis['metadata'],
-                "scene_analysis": sequence,
-                "estimated_duration": estimated_duration,
-                "word_count": len(commentary_text.split())
-            }
-            
-            # Save commentary
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(commentary, f, indent=2, ensure_ascii=False)
-            
-            return commentary
+            except Exception as api_error:
+                logger.error(f"OpenAI API error: {str(api_error)}")
+                return None
+
+            try:
+                if not completion or not completion.choices:
+                    logger.error("No completion received from OpenAI")
+                    return None
+
+                commentary_text = completion.choices[0].message.content
+                if not commentary_text or len(commentary_text.strip()) == 0:
+                    logger.error("Received empty response from OpenAI")
+                    return None
+                    
+                logger.info("\n=== Generated Commentary ===")
+                logger.info(f"Language: {selected_language}")
+                logger.info(commentary_text)
+                
+                # Validate and clean the generated text
+                is_valid, cleaned_text = self._analyze_text_for_narration(commentary_text, selected_language)
+                
+                if not is_valid:
+                    logger.error(f"Generated text validation failed: {cleaned_text}")
+                    return None
+                
+                # Use the cleaned and validated text
+                commentary_text = cleaned_text
+                video_duration = float(analysis['metadata'].get('duration', 0))
+                estimated_duration = self._estimate_speech_duration(commentary_text, selected_language)
+                
+                # If estimated duration is too long, regenerate with stricter limits
+                if estimated_duration > video_duration:
+                    logger.warning(f"Generated text too long ({estimated_duration:.1f}s > {video_duration:.1f}s). Regenerating...")
+                    
+                    # Reduce target words by 20%
+                    words_per_minute = 120 if selected_language == 'ur' else 150
+                    target_words = int((video_duration * 0.8 / 60) * words_per_minute)
+                    
+                    base_prompt += f"\n\nWARNING: Previous generation was too long. Please generate SHORTER text:\n"
+                    base_prompt += f"- MUST be under {video_duration:.1f} seconds\n"
+                    base_prompt += f"- Use maximum {target_words} words\n"
+                    base_prompt += "- Focus on most important points only"
+                    
+                    try:
+                        # Regenerate with stricter limits
+                        completion = self.client.chat.completions.create(
+                            model="gpt-4o-mini",  # Use exact model name
+                            messages=[
+                                {"role": "system", "content": self._build_system_prompt()},
+                                {"role": "user", "content": base_prompt}
+                            ],
+                            temperature=0.7,
+                            max_tokens=800
+                        )
+                        
+                        if not completion or not completion.choices:
+                            logger.error("No completion received from OpenAI during regeneration")
+                            return None
+                            
+                        commentary_text = completion.choices[0].message.content
+                        estimated_duration = self._estimate_speech_duration(commentary_text, selected_language)
+                    except Exception as api_error:
+                        logger.error(f"OpenAI API error during regeneration: {str(api_error)}")
+                        return None
+                
+                commentary = {
+                    "style": self.style.value,
+                    "commentary": commentary_text,
+                    "metadata": analysis['metadata'],
+                    "estimated_duration": estimated_duration,
+                    "word_count": len(commentary_text.split()),
+                    "language": selected_language,
+                    "is_narration_optimized": True
+                }
+                
+                # Save commentary
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(commentary, f, indent=2, ensure_ascii=False)
+                
+                return commentary
+                
+            except Exception as e:
+                logger.error(f"Error processing commentary: {str(e)}")
+                return None
             
         except Exception as e:
             logger.error(f"Error generating commentary: {str(e)}")
             return None
     
+    def _format_vision_insights(self, insights: List[Dict]) -> str:
+        """Format vision insights for the prompt."""
+        formatted = []
+        for insight in insights:
+            timestamp = insight['timestamp']
+            if 'objects' in insight and insight['objects']:
+                formatted.append(f"Time {timestamp}s - Objects: {', '.join(insight['objects'])}")
+            if 'text' in insight and insight['text']:
+                formatted.append(f"Time {timestamp}s - Text: {insight['text']}")
+            if 'description' in insight and insight['description']:
+                formatted.append(f"Time {timestamp}s - Scene: {insight['description']}")
+        return "\n".join(formatted)
+
     def format_for_audio(self, commentary: Dict) -> str:
         """
         Format commentary for text-to-speech with style-specific patterns.
@@ -454,158 +733,102 @@ Commentary style: {}
         
         return text.strip()
 
-def execute_step(
-    analysis_file: Path,
+    def _analyze_text_for_narration(self, text: str, language: str) -> Tuple[bool, str]:
+        """
+        Analyze text for audio narration compatibility.
+        """
+        try:
+            logger.info("=== Original Text ===")
+            logger.info(f"Language: {language}")
+            logger.info(text)
+            
+            # Remove any control characters
+            cleaned_text = ''.join(char for char in text if char.isprintable() or char.isspace())
+            
+            logger.info("\n=== After Control Character Removal ===")
+            logger.info(cleaned_text)
+            
+            # Basic validation
+            if not cleaned_text.strip():
+                return False, "Empty text after cleaning"
+            
+            # Language-specific checks
+            if language == 'ur':
+                # Validate Urdu text
+                if not self._validate_urdu_text(cleaned_text):
+                    return False, "Invalid Urdu text format"
+                
+                # Add appropriate breaks and formatting for Urdu
+                cleaned_text = self._add_narration_tags(cleaned_text, 'ur')
+                
+                logger.info("\n=== After Urdu Formatting ===")
+                logger.info(cleaned_text)
+                
+            else:  # English
+                # Validate English text
+                if not self._validate_english_text(cleaned_text):
+                    return False, "Invalid English text format"
+                
+                # Add appropriate formatting for English
+                cleaned_text = self._add_narration_tags(cleaned_text, 'en')
+                
+                logger.info("\n=== After English Formatting ===")
+                logger.info(cleaned_text)
+            
+            logger.info("\n=== Final Text for Audio Generation ===")
+            logger.info(cleaned_text)
+            logger.info("=== End of Text Processing ===\n")
+            
+            return True, cleaned_text
+            
+        except Exception as e:
+            logger.error(f"Error analyzing text for narration: {e}")
+            return False, str(e)
+
+async def execute_step(
+    frames_info: dict,
     output_dir: Path,
-    style: CommentaryStyle,
-    llm_provider: Optional[LLMProvider] = None
-) -> Tuple[str, Optional[str]]:
+    style_name: str
+) -> str:
     """
     Generate commentary based on video analysis.
     
     Args:
-        analysis_file: Path to the analysis JSON file
+        frames_info: Dictionary containing frame analysis results
         output_dir: Directory to save output files
-        style: Commentary style to use
-        llm_provider: Optional LLM provider to use (defaults to OPENAI)
-    
+        style_name: Style of commentary to use
+        
     Returns:
-        Tuple of (commentary text, audio script)
+        Audio script text
     """
     try:
-        # Load analysis results
-        with open(analysis_file, 'r', encoding='utf-8') as f:
-            analysis_data = json.load(f)
+        # Save analysis for reference
+        analysis_file = output_dir / "final_analysis.json"
+        with open(analysis_file, 'w', encoding='utf-8') as f:
+            json.dump(frames_info, f, indent=2)
         
-        # Get video duration from metadata
-        duration = float(analysis_data.get('metadata', {}).get('duration', 0))
-        if duration <= 0:
-            logger.warning("Video duration not found in metadata, using default")
-            duration = 60  # Default duration
-            
-        # Calculate word limit based on average speaking rate (150 words per minute)
-        # Subtract 1 second for safety margin
-        speaking_duration = max(duration - 1, 1)
-        word_limit = int((speaking_duration / 60) * 150)
+        # Initialize generator with style
+        style = CommentaryStyle[style_name.upper()]
+        generator = CommentaryGenerator(style)
         
-        # Format user context
-        user_context = "Title: {}\nDescription: {}".format(
-            analysis_data.get('metadata', {}).get('title', ''),
-            analysis_data.get('metadata', {}).get('description', '')
-        )
+        # Generate commentary
+        commentary = await generator.generate_commentary(analysis_file, output_dir / f"commentary_{style_name}.json")
+        if not commentary:
+            raise ValueError("Failed to generate commentary")
         
-        # Format vision analysis
-        vision_analysis = []
+        # Format for audio
+        audio_script = generator.format_for_audio(commentary)
         
-        # Add context from metadata
-        vision_analysis.append("Video Context:")
-        vision_analysis.append(f"Title: {analysis_data.get('metadata', {}).get('title', 'Unknown')}")
-        vision_analysis.append(f"Description: {analysis_data.get('metadata', {}).get('description', 'No description available')}\n")
-        
-        # Add Google Vision analysis
-        google_vision_results = []
-        for frame in analysis_data.get('frames', []):
-            if 'google_vision' in frame:
-                timestamp = frame.get('timestamp', 0)
-                objects = frame['google_vision'].get('objects', [])
-                labels = frame['google_vision'].get('labels', [])
-                text = frame['google_vision'].get('text', '')
-                
-                if objects or labels or text:
-                    frame_analysis = "At {}s:".format(timestamp)
-                    if objects:
-                        frame_analysis += "\nObjects: {}".format(', '.join(objects))
-                    if labels:
-                        frame_analysis += "\nLabels: {}".format(', '.join(labels))
-                    if text:
-                        frame_analysis += "\nText: {}".format(text)
-                    google_vision_results.append(frame_analysis)
-        
-        if google_vision_results:
-            vision_analysis.append("Computer Vision Analysis:")
-            vision_analysis.extend(google_vision_results)
-        
-        # Add OpenAI Vision analysis
-        openai_vision_results = []
-        for frame in analysis_data.get('frames', []):
-            if 'openai_vision' in frame:
-                timestamp = frame.get('timestamp', 0)
-                description = frame['openai_vision'].get('detailed_description', '')
-                
-                if description:
-                    frame_analysis = "At {}s:".format(timestamp)
-                    frame_analysis += "\nScene Analysis: {}".format(description)
-                    openai_vision_results.append(frame_analysis)
-        
-        if openai_vision_results:
-            vision_analysis.append("\nDetailed Scene Analysis:")
-            vision_analysis.extend(openai_vision_results)
-            
-        # Generate final commentary prompt
-        commentary_prompt = """
-You are reacting to this video in real-time! Share your genuine emotional response and thoughts about what you're seeing right now.
-
-Here's the context and analysis (use this to inform your emotions, but don't describe it directly):
-{}
-
-Create a {} style reaction that:
-1. Shows your immediate emotional response to what you're seeing ("OMG this is the cutest thing ever!" "My heart is literally melting!")
-2. Shares your genuine feelings about the specific moment ("This video is making my whole day!" "I'm absolutely in love with this!")
-3. Uses casual, natural language but stays specific to what's happening
-4. Makes relatable comments about the actual content ("This is the kind of wholesome content we need!")
-5. Keeps the energy high and authentic
-
-Remember:
-- React to what you're actually seeing, not vague references
-- Share specific emotions about this exact video
-- Use expressions like "omg", "aww", "wow", "I can't even..."
-- Make it feel like you're watching and reacting right now
-- NO phrases like "what they meant" or vague references - be specific!
-
-Commentary style: {}
-""".format('\n'.join(vision_analysis), style.value, style.value)
-        
-        # Initialize prompt manager with specified provider
-        prompt_manager = PromptManager(provider=llm_provider or LLMProvider.OPENAI)
-        
-        # Get the appropriate prompt template
-        prompt_template = COMMENTARY_PROMPTS[style.value]
-        
-        # Generate commentary with formatted analysis
-        commentary = prompt_manager.generate_response(
-            prompt_template,
-            analysis=user_context,
-            vision_analysis=commentary_prompt,
-            duration=str(duration),
-            word_limit=word_limit
-        )
-        
-        # Save commentary to file
-        commentary_file = output_dir / f"commentary_{style.value}.txt"
+        # Save commentary for reference
+        commentary_file = output_dir / f"commentary_{style_name}.json"
         with open(commentary_file, 'w', encoding='utf-8') as f:
-            f.write(commentary)
+            json.dump(commentary, f, indent=2)
         
-        # Save metadata
-        metadata_file = output_dir / f"commentary_{style.value}.json"
-        metadata = {
-            "style": style.value,
-            "llm_provider": prompt_manager.provider.value,
-            "analysis_source": str(analysis_file),
-            "target_duration": duration,
-            "word_limit": word_limit
-        }
-        with open(metadata_file, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
-        
-        # Process commentary for audio
-        audio_script = process_for_audio(commentary)
-        
-        logger.info(f"Generated {style.value} commentary using {prompt_manager.provider.value}")
-        return commentary, audio_script
+        return audio_script
         
     except Exception as e:
         logger.error(f"Error generating commentary: {str(e)}")
-        return "", None
+        raise
 
 def process_for_audio(commentary: str) -> str:
     """

@@ -15,6 +15,16 @@ from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
+def convert_numpy_floats(obj):
+    """Convert any numpy float types to Python floats for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: convert_numpy_floats(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_floats(item) for item in obj]
+    elif hasattr(obj, 'dtype'):  # Check if it's a numpy type
+        return float(obj)
+    return obj
+
 class VisionAnalyzer:
     """Handles image analysis using multiple vision APIs with optimized usage."""
     
@@ -79,7 +89,7 @@ class VisionAnalyzer:
         
         return selected_frames
     
-    def analyze_frame_google_vision(self, frame_path: Path) -> Tuple[Optional[dict], bool]:
+    async def analyze_frame_google_vision(self, frame_path: Path) -> Tuple[Optional[dict], bool]:
         """
         Analyze a frame using Google Vision API.
         Optimized to use only essential features.
@@ -89,24 +99,23 @@ class VisionAnalyzer:
                 content = image_file.read()
             
             image = vision.Image(content=content)
-            response = self.vision_client.annotate_image({
-                'image': image,
-                'features': [
-                    {'type_': vision.Feature.Type.LABEL_DETECTION},
-                    {'type_': vision.Feature.Type.OBJECT_LOCALIZATION},
-                ]
-            })
+            features = [
+                vision.Feature(type_=vision.Feature.Type.LABEL_DETECTION),
+                vision.Feature(type_=vision.Feature.Type.OBJECT_LOCALIZATION)
+            ]
+            request = vision.AnnotateImageRequest(image=image, features=features)
+            response = self.vision_client.annotate_image(request)
             
             return {
                 "labels": [label.description for label in response.label_annotations],
                 "objects": [obj.name for obj in response.localized_object_annotations],
-                "confidence": response.label_annotations[0].score if response.label_annotations else 0
+                "confidence": float(response.label_annotations[0].score) if response.label_annotations else 0.0
             }, True
         except Exception as e:
             logger.error(f"Google Vision API error: {str(e)}")
             return None, False
     
-    def analyze_frame_openai(self, frame_path: Path, google_analysis: Optional[dict] = None) -> Tuple[Optional[dict], bool]:
+    async def analyze_frame_openai(self, frame_path: Path, google_analysis: Optional[dict] = None) -> Tuple[Optional[dict], bool]:
         """
         Analyze a frame using OpenAI Vision API.
         Provides detailed scene understanding.
@@ -115,7 +124,7 @@ class VisionAnalyzer:
             with open(frame_path, "rb") as image_file:
                 base64_image = base64.b64encode(image_file.read()).decode('utf-8')
             
-            completion = self.openai_client.chat.completions.create(
+            response = self.openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {
@@ -126,14 +135,15 @@ class VisionAnalyzer:
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{base64_image}",
-                                }
+                                },
                             },
                         ],
                     }
-                ]
+                ],
+                max_tokens=300,
             )
             
-            return {"detailed_description": completion.choices[0].message.content}, True
+            return {"detailed_description": response.choices[0].message.content}, True
         except Exception as e:
             logger.error(f"OpenAI Vision API error: {str(e)}")
             return None, False
@@ -170,7 +180,7 @@ Keep the analysis natural and focused on how this frame relates to the video's c
         
         return prompt
     
-    def analyze_video(self, scene_changes: List[Path], motion_scores: List[Tuple[Path, float]], video_duration: float) -> dict:
+    async def analyze_video(self, scene_changes: List[Path], motion_scores: List[Tuple[Path, float]], video_duration: float) -> dict:
         """
         Main analysis workflow with optimized API usage.
         Analyzes more frames with Google Vision and uses OpenAI for final confirmation.
@@ -183,7 +193,16 @@ Keep the analysis natural and focused on how this frame relates to the video's c
         Returns:
             Dictionary containing analysis results
         """
-        final_results = {"metadata": self.metadata, "frames": []}
+        # Convert any numpy floats in metadata to Python floats
+        metadata = convert_numpy_floats(self.metadata)
+        
+        # Convert motion scores to Python floats
+        motion_scores = [(path, float(score)) for path, score in motion_scores]
+        
+        final_results = {
+            "metadata": metadata,
+            "frames": []
+        }
         
         # Select key frames for analysis
         key_frames = self.select_key_frames(scene_changes, motion_scores)
@@ -194,12 +213,14 @@ Keep the analysis natural and focused on how this frame relates to the video's c
         for frame_path in key_frames:
             frame_result = {
                 "frame": frame_path.name,
-                "timestamp": frame_path.name.split('_')[1].replace('s.jpg', '')
+                "timestamp": float(frame_path.name.split('_')[1].replace('s.jpg', ''))  # Convert to float
             }
             
             # Google Vision Analysis for all frames
-            google_analysis, success = self.analyze_frame_google_vision(frame_path)
+            google_analysis, success = await self.analyze_frame_google_vision(frame_path)
             if success:
+                # Convert any numpy floats to Python floats
+                google_analysis = convert_numpy_floats(google_analysis)
                 frame_result["google_vision"] = google_analysis
                 google_vision_results.append(frame_result)
                 final_results["frames"].append(frame_result)
@@ -212,7 +233,7 @@ Keep the analysis natural and focused on how this frame relates to the video's c
             frame_path = self.frames_dir / best_frame["frame"]
             
             # OpenAI Vision Analysis for final confirmation
-            openai_analysis, success = self.analyze_frame_openai(
+            openai_analysis, success = await self.analyze_frame_openai(
                 frame_path,
                 {
                     "labels": list(set(
@@ -238,12 +259,12 @@ Keep the analysis natural and focused on how this frame relates to the video's c
         # Save results
         analysis_file = self.output_dir / "final_analysis.json"
         with open(analysis_file, 'w', encoding='utf-8') as f:
-            json.dump(final_results, f, indent=2)
+            json.dump(final_results, f, indent=2, ensure_ascii=False)
         
         logger.info(f"Analysis complete. Results saved to {analysis_file}")
         return final_results
 
-def execute_step(
+async def execute_step(
     frames_dir: Path,
     output_dir: Path,
     metadata: dict,
@@ -267,8 +288,14 @@ def execute_step(
     """
     logger.debug("Step 3: Analyzing frames...")
     
+    # Convert motion scores to Python floats
+    motion_scores = [(path, float(score)) for path, score in motion_scores]
+    
+    # Initialize analyzer with metadata
     analyzer = VisionAnalyzer(frames_dir, output_dir, metadata)
-    results = analyzer.analyze_video(scene_changes, motion_scores, video_duration)
+    
+    # Analyze video with provided parameters
+    results = await analyzer.analyze_video(scene_changes, motion_scores, float(video_duration))
     
     logger.debug(f"Analyzed {len(results['frames'])} frames")
     return results 

@@ -1,189 +1,133 @@
-# Video Commentary Bot
+# AI Video Commentary Bot
 
-A Telegram bot that generates engaging commentary for videos using AI.
+A powerful application that adds AI-generated commentary to videos using multiple styles and languages. Available both as a Telegram bot and a Streamlit web application.
 
-## Features
+## 🎯 Latest Updates
 
-- Multiple commentary styles (Documentary, Energetic, Analytical, Storyteller, Urdu)
-- Intelligent video analysis using Google Cloud Vision AI
-- Natural language commentary generation
-- Professional audio synthesis with multi-language support
-- Automatic video processing and generation
+- ✨ Added Telegram-style animations during video processing
+- 🎨 Improved mobile-responsive UI design
+- 🚀 Optimized video processing and cleanup
+- 💾 Instant video availability after processing
+- 🔄 Automatic cleanup of temporary files
+- 📱 Enhanced mobile viewing experience
 
-## Commentary Styles
+## ✨ Features
 
-- 🎥 Documentary - Professional and informative
-- 🔥 Energetic - Dynamic and enthusiastic
-- 🔬 Analytical - Detailed and technical
-- 📖 Storyteller - Narrative and emotional
-- 🇵🇰 Urdu - Natural Urdu language commentary (GPT-4 only)
+- 🎭 Multiple commentary styles (Documentary, Energetic, Analytical, Storyteller)
+- 🤖 Choice of AI models (OpenAI GPT-4, Deepseek)
+- 🌐 Multiple language support (English, Urdu)
+- 🎙️ Professional voice synthesis
+- 📤 Support for video upload and URL processing
+- 🎬 Support for various video platforms (YouTube, Vimeo, TikTok, etc.)
+- 📱 Mobile-responsive design
+- 🎨 Beautiful UI with Telegram-style animations
 
-## Deployment on Railway
+## 🚀 Quick Deploy to Railway
 
 1. Fork this repository to your GitHub account
+2. Create a new project on [Railway](https://railway.app/)
+3. Connect your GitHub repository to Railway
+4. Add the following environment variables in Railway:
+   - `OPENAI_API_KEY`
+   - `DEEPSEEK_API_KEY`
+   - `GOOGLE_APPLICATION_CREDENTIALS_JSON` (entire JSON content)
+   - Other variables from `.env.example`
+5. Deploy! Railway will automatically build and deploy your app
 
-2. Create a new project on Railway and connect it to your GitHub repository
+Your app will be available at: `https://your-project-name.railway.app`
 
-3. Add the following environment variables in Railway:
-   ```
-   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-   OPENAI_API_KEY=your_openai_api_key
-   DEEPSEEK_API_KEY=your_deepseek_api_key
-   GOOGLE_APPLICATION_CREDENTIALS_JSON=your_google_credentials_json
-   CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
-   CLOUDINARY_API_KEY=your_cloudinary_api_key
-   CLOUDINARY_API_SECRET=your_cloudinary_secret
-   ```
+## 🛠️ Prerequisites
 
-4. Deploy! Railway will automatically build and deploy your bot using the Dockerfile
+- Python 3.8 or higher
+- OpenAI API key
+- Deepseek API key
+- Google Cloud credentials (for Text-to-Speech)
+- Telegram Bot Token (for Telegram bot only)
 
-### Example Railway Variables JSON
-
-You can also set up your Railway environment by creating a `railway.json` file with the following format:
-
-```json
-{
-  "OPENAI_API_KEY": "your-openai-api-key",
-  "DEEPSEEK_API_KEY": "your-deepseek-api-key",
-  "CLOUDINARY_CLOUD_NAME": "your-cloud-name",
-  "CLOUDINARY_API_KEY": "your-api-key",
-  "CLOUDINARY_API_SECRET": "your-api-secret",
-  "TELEGRAM_BOT_TOKEN": "your-telegram-bot-token",
-  "GOOGLE_APPLICATION_CREDENTIALS_JSON": {
-    "type": "service_account",
-    "project_id": "your-project-id",
-    "private_key_id": "your-private-key-id",
-    "private_key": "your-private-key-content",
-    "client_email": "service-account-name@project-id.iam.gserviceaccount.com",
-    "client_id": "your-client-id",
-    "auth_uri": "[AUTH_URI]",
-    "token_uri": "[TOKEN_URI]",
-    "auth_provider_x509_cert_url": "[CERT_URL]",
-    "client_x509_cert_url": "[CLIENT_CERT_URL]"
-  }
-}
-```
-
-**Important Security Notes:**
-1. Replace all placeholder values with your actual credentials
-2. Never commit this file to version control
-3. Keep your API keys and credentials secure
-4. Use environment variables in production
-
-## Google Cloud Setup
-
-1. Create a Google Cloud Project:
-   - Go to [Google Cloud Console](https://console.cloud.google.com)
-   - Create a new project or select an existing one
-   - Note down your Project ID
-
-2. Enable Required APIs:
-   - Navigate to "APIs & Services" > "Library"
-   - Enable the following APIs:
-     * Cloud Vision API
-     * Cloud Text-to-Speech API
-     * Cloud Storage API
-
-3. Create Service Account:
-   - Go to "IAM & Admin" > "Service Accounts"
-   - Click "Create Service Account"
-   - Name your service account (e.g., "video-bot")
-   - Grant the following roles:
-     * Cloud Vision API User
-     * Cloud Text-to-Speech API User
-     * Storage Object Viewer
-
-4. Generate Credentials:
-   - After creating the service account, click on it
-   - Go to "Keys" tab
-   - Click "Add Key" > "Create new key"
-   - Choose JSON format
-   - Download the JSON file
-
-5. Format Credentials for Railway:
-   - Open the downloaded JSON file
-   - Convert it to a single line string
-   - Escape all double quotes with backslashes
-   - Set it as GOOGLE_APPLICATION_CREDENTIALS_JSON in your environment variables
-
-Example of formatted credentials:
-```json
-{\"type\":\"service_account\",\"project_id\":\"your-project-id\",\"private_key_id\":\"your-key-id\",\"private_key\":\"-----BEGIN PRIVATE KEY-----\\nYour-Private-Key\\n-----END PRIVATE KEY-----\\n\",\"client_email\":\"your-service-account@your-project.iam.gserviceaccount.com\",\"client_id\":\"your-client-id\"}
-```
-
-## Local Development
+## 📦 Installation
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/video-commentary-bot.git
-   cd video-commentary-bot
-   ```
-
-2. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Create a `.env` file with your credentials (see `.env.example`)
-
-5. Run the bot:
-   ```bash
-   python bot.py
-   ```
-
-## Environment Variables
-
-- `TELEGRAM_BOT_TOKEN`: Your Telegram bot token from BotFather
-- `OPENAI_API_KEY`: OpenAI API key for commentary generation (GPT-4 required for Urdu style)
-- `DEEPSEEK_API_KEY`: Deepseek API key for alternative commentary generation
-- `GOOGLE_APPLICATION_CREDENTIALS_JSON`: Google Cloud credentials JSON string
-- `CLOUDINARY_CLOUD_NAME`: Cloudinary cloud name
-- `CLOUDINARY_API_KEY`: Cloudinary API key
-- `CLOUDINARY_API_SECRET`: Cloudinary API secret
-
-## System Requirements
-
-- Python 3.10 or higher
-- FFmpeg
-- OpenCV dependencies
-
-## Docker Support
-
-Build the Docker image:
 ```bash
-docker build -t video-commentary-bot .
+git clone <repository-url>
+cd <repository-directory>
 ```
 
-Run the container:
+2. Install dependencies:
 ```bash
-docker run -d --env-file .env video-commentary-bot
+pip install -r requirements.txt
 ```
 
-## Troubleshooting Google Credentials
+3. Set up environment variables:
+Copy `.env.example` to `.env` and fill in your values:
+```bash
+cp .env.example .env
+```
 
-Common issues and solutions:
+4. Set up configuration:
+Copy `railway.json.example` to `railway.json` and update with your credentials:
+```bash
+cp railway.json.example railway.json
+```
 
-1. **Invalid Credentials Format**:
-   - Ensure all quotes are properly escaped
-   - The entire JSON should be on a single line
-   - Verify all newlines in the private key are escaped with \\n
+## 🚀 Running the Applications
 
-2. **Permission Denied**:
-   - Check if all required APIs are enabled
-   - Verify service account has correct roles assigned
-   - Ensure project ID matches your active Google Cloud project
+### Streamlit Web App
+```bash
+streamlit run streamlit_app.py
+```
+The web interface will be available at `http://localhost:8501`
 
-3. **API Quota Exceeded**:
-   - Check your Google Cloud Console quotas
-   - Consider requesting quota increase if needed
-   - Monitor API usage in Google Cloud Console
+### Telegram Bot
+```bash
+python new_bot.py
+```
 
-## License
+## 💡 Usage
 
-MIT License - feel free to use and modify for your own projects! 
+### Web Interface
+1. Open the Streamlit app in your browser
+2. Choose your preferred settings in the sidebar:
+   - Commentary style
+   - AI model
+   - Language
+3. Either upload a video file or provide a video URL
+4. Click "Process" and watch the Telegram-style animations
+5. Download your enhanced video when processing is complete
+
+### Telegram Bot
+1. Start a chat with the bot
+2. Use /start to see available commands
+3. Configure your preferences using /settings
+4. Send a video file or URL to process
+5. Wait for the bot to return your enhanced video
+
+## ⚠️ Limitations
+
+- Maximum video size: 50MB
+- Maximum video duration: 5 minutes
+- Supported formats: MP4, MOV, AVI
+
+## 🔧 Troubleshooting
+
+If you encounter issues:
+- Check your API keys and credentials
+- Ensure your video meets the size and format requirements
+- Check your internet connection
+- Look for error messages in the console output
+- For Railway deployment issues, check the deployment logs
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🔗 Share Your App
+
+After deploying to Railway, you can share your app using the Railway-provided URL:
+`https://your-project-name.railway.app`
+
+To customize the domain:
+1. Go to your Railway project settings
+2. Navigate to the "Domains" section
+3. Add a custom domain or use Railway's provided domain
+
+Remember to secure your API keys and credentials when sharing the app! 

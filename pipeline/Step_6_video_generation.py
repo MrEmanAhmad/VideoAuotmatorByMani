@@ -13,6 +13,7 @@ import cloudinary.uploader
 import cloudinary.api
 from cloudinary import CloudinaryVideo
 import requests
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ class VideoGenerator:
             filename = 'video'
         return filename.strip('_')
         
-    def upload_media(self, file_path: str, resource_type: str) -> Optional[Dict]:
+    async def upload_media(self, file_path: str, resource_type: str) -> Optional[Dict]:
         """
         Upload media file to Cloudinary with optimized settings.
         
@@ -106,7 +107,7 @@ class VideoGenerator:
             logger.error(f"Error uploading media: {str(e)}")
             return None
             
-    def cleanup_resources(self):
+    async def cleanup_resources(self):
         """Clean up uploaded resources from Cloudinary."""
         for resource_id in self.uploaded_resources:
             try:
@@ -116,7 +117,7 @@ class VideoGenerator:
                 logger.warning(f"Error cleaning up resource {resource_id}: {str(e)}")
         self.uploaded_resources = []
             
-    def generate_video(self, video_id: str, audio_id: str, output_path: Path) -> Optional[Path]:
+    async def generate_video(self, video_id: str, audio_id: str, output_path: Path) -> Optional[Path]:
         """
         Generate final video with optimized processing.
         
@@ -184,26 +185,26 @@ class VideoGenerator:
             )
             
             # Download with streaming and chunking
-            with requests.get(video_url, stream=True) as response:
-                if response.status_code == 200:
-                    output_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(output_path, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(video_url) as response:
+                    if response.status == 200:
+                        output_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(output_path, 'wb') as f:
+                            async for chunk in response.content.iter_chunked(8192):
                                 f.write(chunk)
-                    logger.info(f"Video generated successfully: {output_path}")
-                    return output_path
-                else:
-                    logger.error(f"Error downloading video: {response.status_code}")
-                    return None
+                        logger.info(f"Video generated successfully: {output_path}")
+                        return output_path
+                    else:
+                        logger.error(f"Error downloading video: {response.status}")
+                        return None
                 
         except Exception as e:
             logger.error(f"Error generating video: {str(e)}")
             return None
         finally:
-            self.cleanup_resources()
+            await self.cleanup_resources()
 
-def execute_step(
+async def execute_step(
     video_file: Path,
     audio_file: Path,
     output_dir: Path,
@@ -236,27 +237,21 @@ def execute_step(
     
     try:
         # Upload video and audio
-        video_response = generator.upload_media(str(video_file), 'video')
-        audio_response = generator.upload_media(str(audio_file), 'video')  # Use video type for audio to support overlay
+        video_response = await generator.upload_media(str(video_file), 'video')
+        audio_response = await generator.upload_media(str(audio_file), 'video')  # Use video type for audio to support overlay
         
         if not video_response or not audio_response:
             return None
         
         # Generate final video
         output_file = output_dir / f"final_video_{style_name}.mp4"
-        result = generator.generate_video(
+        result = await generator.generate_video(
             video_response['public_id'],
             audio_response['public_id'],
             output_file
         )
         
-        if result:
-            logger.debug(f"Video generated successfully: {output_file}")
-            return output_file
-        else:
-            logger.error("Video generation failed")
-            return None
-            
+        return result
     except Exception as e:
-        logger.error(f"Error in video generation step: {str(e)}")
+        logger.error(f"Error executing step: {str(e)}")
         return None 

@@ -210,24 +210,48 @@ def execute_step(
     min_scene_change: float = 30.0,
     min_motion_threshold: float = 2.0,
     max_frames: int = 4  # Reduced from default
-) -> Tuple[List[Path], List[Path], List[Tuple[Path, float]]]:
+) -> Tuple[List[Path], List[Path], List[Tuple[Path, float]], float, dict]:
     """
     Execute frame extraction step.
     
     Args:
-        video_file: Path to the video file
-        output_dir: Directory to save extracted frames
-        min_scene_change: Minimum threshold for scene change detection
-        min_motion_threshold: Minimum threshold for motion detection
+        video_file: Path to video file
+        output_dir: Directory to save frames
+        min_scene_change: Minimum difference for scene change detection
+        min_motion_threshold: Minimum score for motion detection
         max_frames: Maximum number of frames to extract
         
     Returns:
         Tuple containing:
-        - List of key frame paths
+        - List of extracted frame paths
         - List of scene change frame paths
         - List of tuples containing (frame path, motion score)
+        - Video duration in seconds
+        - Video metadata dictionary
     """
-    logger.debug("Step 2: Extracting and analyzing frames...")
+    logger.debug("Step 2: Extracting frames...")
+    
+    # Load video metadata
+    metadata = {}
+    metadata_file = output_dir / "video_metadata.json"
+    if metadata_file.exists():
+        try:
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                import json
+                metadata = json.load(f)
+            logger.debug("Loaded video metadata")
+        except Exception as e:
+            logger.warning(f"Error loading metadata: {str(e)}")
+    
+    # Get video duration
+    cap = cv2.VideoCapture(str(video_file))
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video: {video_file}")
+    
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = frame_count / fps if fps > 0 else 0
+    cap.release()
     
     frame_extractor = FrameExtractor(video_file, output_dir)
     key_frames = frame_extractor.extract_frames(
@@ -242,5 +266,6 @@ def execute_step(
     
     logger.debug(f"Extracted {len(key_frames)} key frames")
     logger.debug(f"Detected {len(scene_changes)} scene changes")
+    logger.debug(f"Final video duration: {duration:.2f} seconds")
     
-    return key_frames, scene_changes, motion_scores 
+    return key_frames, scene_changes, motion_scores, duration, metadata 

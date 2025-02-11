@@ -1,6 +1,6 @@
 """
 Step 5: Audio generation module
-Generates audio from commentary using Google Cloud Text-to-Speech
+Generates audio from commentary using Google Cloud TTS
 """
 
 import os
@@ -40,7 +40,7 @@ class AudioGenerator:
                 })
         return english_voices
         
-    def generate_audio(self, text: str, output_path: Path, target_duration: float, is_urdu: bool = False) -> Optional[Path]:
+    async def generate_audio(self, text: str, output_path: Path, target_duration: float, is_urdu: bool = False) -> Optional[Path]:
         """
         Generate audio from text using specified voice parameters.
         
@@ -107,60 +107,131 @@ class AudioGenerator:
             logger.error(f"Error generating audio: {str(e)}")
             return None
 
-def execute_step(
-    audio_script: str,
-    output_dir: Path,
-    style_name: str
-) -> Optional[Path]:
-    """
-    Generate audio from text using Google Cloud Text-to-Speech.
-    
-    Args:
-        audio_script: Text to convert to speech
-        output_dir: Directory to save output files
-        style_name: Style of commentary for voice selection
-        
-    Returns:
-        Path to generated audio file if successful, None otherwise
-    """
+def generate_urdu_audio(text: str, output_path: str) -> bool:
+    """Generate audio for Urdu text using appropriate SSML and voice settings."""
     try:
-        # Save script for reference
-        script_file = output_dir / f"audio_script_{style_name}.txt"
-        with open(script_file, 'w', encoding='utf-8') as f:
-            f.write(audio_script)
-            
-        # Load video metadata to get duration
-        try:
-            with open(output_dir / "video_metadata.json", 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-                video_duration = float(metadata.get('duration', 0))
-        except Exception as e:
-            logger.error(f"Could not load video duration: {e}")
-            video_duration = 0
+        client = texttospeech.TextToSpeechClient()
         
-        # Initialize audio generator with Google Cloud credentials from credentials directory
-        credentials_path = Path("credentials/google_credentials.json")
-        if not credentials_path.exists():
-            logger.error("Google credentials file not found in credentials directory")
-            return None
+        # Clean the text and wrap in proper SSML
+        clean_text = text.replace('<prosody rate="medium" pitch="medium">', '')
+        clean_text = clean_text.replace('</prosody>', '')
+        clean_text = clean_text.replace('<lang xml:lang="ur-PK">', '')
+        clean_text = clean_text.replace('</lang>', '')
         
-        generator = AudioGenerator(str(credentials_path))
+        ssml_text = f"""
+        <speak>
+            <prosody rate="1.2" pitch="+2st">
+                {clean_text}
+            </prosody>
+        </speak>
+        """
         
-        # Generate audio file
-        audio_file = output_dir / f"commentary_{style_name}.wav"
-        result = generator.generate_audio(
-            audio_script, 
-            audio_file, 
-            video_duration,
-            is_urdu=(style_name == "urdu")
+        synthesis_input = texttospeech.SynthesisInput(ssml=ssml_text)
+        
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="ur-PK",
+            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
         )
         
-        if result:
-            logger.debug(f"Audio generated successfully: {audio_file}")
-            return audio_file
-        else:
-            logger.error("Audio generation failed")
-            return None
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16,
+            effects_profile_id=["headphone-class-device"]
+        )
+        
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        
+        with open(output_path, "wb") as out:
+            out.write(response.audio_content)
+            
+        return True
+        
     except Exception as e:
-        logger.error(f"Error executing step: {str(e)}")
-        return None 
+        logger.error(f"Error generating Urdu audio: {str(e)}")
+        return False
+
+def generate_english_audio(text: str, output_path: str) -> bool:
+    """Generate audio for English text using appropriate voice settings."""
+    try:
+        client = texttospeech.TextToSpeechClient()
+        
+        # Clean text of any SSML tags
+        clean_text = text.replace('<prosody rate="medium" pitch="medium">', '')
+        clean_text = clean_text.replace('</prosody>', '')
+        clean_text = clean_text.replace('<lang xml:lang="en-US">', '')
+        clean_text = clean_text.replace('</lang>', '')
+        clean_text = clean_text.replace('<break time="0.3s"/>', '')
+        clean_text = clean_text.replace('<break time="1s"/>', '')
+        
+        synthesis_input = texttospeech.SynthesisInput(text=clean_text)
+        
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            name="en-US-Neural2-F"  # Using a specific neural voice for better quality
+        )
+        
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.LINEAR16,
+            speaking_rate=1.0,
+            pitch=0.0,
+            effects_profile_id=["headphone-class-device"]
+        )
+        
+        response = client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        
+        with open(output_path, "wb") as out:
+            out.write(response.audio_content)
+            
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error generating English audio: {str(e)}")
+        return False
+
+async def execute_step(frames_info: dict, output_dir: Path, style: str = None) -> str:
+    """
+    Generate audio from commentary text.
+    
+    Args:
+        frames_info: Dictionary containing frame analysis and commentary
+        output_dir: Directory to save output files
+        style: Commentary style (optional)
+        
+    Returns:
+        Path to generated audio file
+    """
+    try:
+        # Load commentary
+        style = style or frames_info['metadata'].get('style', 'documentary')
+        commentary_file = output_dir / f"commentary_{style}.json"
+        with open(commentary_file, encoding='utf-8') as f:
+            commentary = json.load(f)
+        
+        # Get text and language
+        text = commentary['commentary']
+        language = commentary.get('language', 'en')
+        
+        logger.info(f"Generating audio for text: {text[:100]}...")
+        
+        # Generate audio file path
+        audio_file = output_dir / f"commentary_{style}.wav"
+        
+        # Generate audio based on language
+        success = generate_urdu_audio(text, str(audio_file)) if language == 'ur' else generate_english_audio(text, str(audio_file))
+        
+        if success:
+            logger.info(f"Successfully generated audio file: {audio_file}")
+            return str(audio_file)
+        else:
+            raise Exception("Failed to generate audio")
+            
+    except Exception as e:
+        logger.error(f"Error in audio generation: {str(e)}")
+        raise 

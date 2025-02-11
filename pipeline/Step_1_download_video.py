@@ -205,3 +205,34 @@ def execute_step(url_or_path: str, output_dir: Path) -> Tuple[bool, Optional[Dic
         logger.error("Video download failed")
         
     return success, metadata, video_title 
+
+async def download_from_url(url: str, output_dir: Path) -> str:
+    """
+    Download video from URL asynchronously.
+    
+    Args:
+        url: Video URL
+        output_dir: Directory to save downloaded video
+        
+    Returns:
+        Path to downloaded video file
+    
+    Raises:
+        Exception if download fails
+    """
+    success, metadata, video_title = execute_step(url, output_dir)
+    
+    if not success:
+        raise Exception("Failed to download video")
+        
+    # Look for the timestamp-based video file
+    video_dir = output_dir / "video"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")  # Use partial timestamp for matching
+    video_files = list(video_dir.glob(f"video_{timestamp}*.mp4"))
+    
+    if not video_files:
+        raise Exception("Downloaded video file not found")
+        
+    # Return the most recently created file if multiple matches
+    video_path = max(video_files, key=lambda p: p.stat().st_mtime)
+    return str(video_path) 
