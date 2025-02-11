@@ -5,7 +5,8 @@ FROM python:3.10-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PORT=8501
 
 # Create a non-root user
 RUN useradd -m -s /bin/bash app_user
@@ -57,12 +58,12 @@ ENV HOME=/home/app_user \
     CHROME_BIN=/usr/bin/google-chrome \
     DISPLAY=:99
 
-# Expose Streamlit port
-EXPOSE 8501
-
 # Set Streamlit specific environment variables
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8
 
-# Command to run Streamlit
-CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"] 
+# Expose the port that will be used by Streamlit
+EXPOSE ${PORT:-8501}
+
+# Command to run Streamlit using PORT environment variable
+CMD streamlit run streamlit_app.py --server.port=${PORT:-8501} --server.address=0.0.0.0 
