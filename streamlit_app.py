@@ -167,15 +167,22 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Session state initialization
-if 'settings' not in st.session_state:
-    st.session_state.settings = init_bot().default_settings.copy()
-if 'processing' not in st.session_state:
-    st.session_state.processing = False
-if 'progress' not in st.session_state:
-    st.session_state.progress = 0
-if 'status' not in st.session_state:
-    st.session_state.status = ""
+# Add this at the start after imports
+def init_session_state():
+    if 'settings' not in st.session_state:
+        st.session_state.settings = init_bot().default_settings.copy()
+    if 'processing' not in st.session_state:
+        st.session_state.processing = False
+    if 'progress' not in st.session_state:
+        st.session_state.progress = 0
+    if 'status' not in st.session_state:
+        st.session_state.status = ""
+    if 'initialized' not in st.session_state:
+        cleanup_memory()
+        st.session_state.initialized = True
+
+# Initialize session state
+init_session_state()
 
 # Title and description
 st.title("🎬 AI Video Commentary Bot")
@@ -248,6 +255,8 @@ with tab1:
                 st.session_state.processing = True
                 st.session_state.progress = 0
                 st.session_state.status = "Starting video processing..."
+                # Run video processing
+                asyncio.run(process_video())
 
 # Video URL Tab
 with tab2:
@@ -265,11 +274,8 @@ with tab2:
                 st.session_state.processing = True
                 st.session_state.progress = 0
                 st.session_state.status = "Starting video processing..."
-
-# Add this at the start of the main content area
-if 'initialized' not in st.session_state:
-    cleanup_memory()
-    st.session_state.initialized = True
+                # Run video processing
+                asyncio.run(process_video())
 
 # Add this function for memory cleanup
 def cleanup_memory():
@@ -419,5 +425,4 @@ async def process_video():
         cleanup_memory()
         st.session_state.processing = False
 
-# Run async processing
-asyncio.run(process_video()) 
+# Remove the unconditional asyncio.run(process_video()) at the end of the file 
