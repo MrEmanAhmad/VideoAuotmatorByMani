@@ -40,27 +40,34 @@ try:
     
     # Load configuration
     try:
-        # First try Railway environment variables
+        # First check if required environment variables are set directly in Railway
         required_vars = [
             'OPENAI_API_KEY',
             'DEEPSEEK_API_KEY',
             'GOOGLE_APPLICATION_CREDENTIALS_JSON'
         ]
         
-        missing_vars = [var for var in required_vars if not os.getenv(var)]
+        # Check if all required variables are in environment
+        all_vars_present = all(os.getenv(var) for var in required_vars)
         
-        if missing_vars:
-            # Try loading from railway.json
+        if not all_vars_present:
+            # If not all variables are present, try loading from railway.json as fallback
             railway_file = Path("railway.json")
             if railway_file.exists():
+                logger.info("Loading configuration from railway.json")
                 with open(railway_file, 'r') as f:
                     config = json.load(f)
                 for key, value in config.items():
-                    os.environ[key] = str(value)
+                    if not os.getenv(key):  # Only set if not already in environment
+                        os.environ[key] = str(value)
             else:
-                raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+                logger.warning("No railway.json found, checking if required variables are set in environment")
+                # Check which variables are missing
+                missing_vars = [var for var in required_vars if not os.getenv(var)]
+                if missing_vars:
+                    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
         
-        # Set up Google credentials
+        # Set up Google credentials if provided
         if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
             creds_dir = Path("credentials")
             creds_dir.mkdir(exist_ok=True)
@@ -70,6 +77,7 @@ try:
                 json.dump(json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"]), f, indent=2)
             
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
+            logger.info("Google credentials configured successfully")
         
         # Import required modules
         import tempfile
