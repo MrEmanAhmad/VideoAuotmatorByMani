@@ -13,8 +13,11 @@ ENV PYTHONUNBUFFERED=1 \
 # Create a non-root user
 RUN useradd -m -s /bin/bash app_user
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Add additional repositories and install system dependencies
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     ffmpeg \
     libsm6 \
     libxext6 \
@@ -35,16 +38,14 @@ RUN apt-get update && apt-get install -y \
     default-jdk \
     apt-transport-https \
     ca-certificates \
-    chromium-chromedriver \
-    && rm -rf /var/lib/apt/lists/*
+    chromium \
+    chromium-driver && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Chrome
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Set Chrome and ChromeDriver paths
+ENV CHROME_BIN=/usr/bin/chromium \
+    CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
 # Set working directory
 WORKDIR /app
@@ -65,7 +66,7 @@ RUN mkdir -p /home/app_user/.streamlit \
     credentials \
     analysis_temp \
     sample_generated_videos \
-    /home/app_user/.config/google-chrome
+    /home/app_user/.config/chromium
 
 # Copy Streamlit config
 COPY .streamlit/config.toml /home/app_user/.streamlit/config.toml
@@ -89,15 +90,11 @@ RUN chown -R app_user:app_user /app \
     /home/app_user/.streamlit \
     /home/app_user/.cache
 
-# Create symlink for ChromeDriver
-RUN ln -sf /usr/lib/chromium-browser/chromedriver /usr/local/bin/chromedriver
-
 # Switch to non-root user
 USER app_user
 
 # Set Chrome and Selenium configuration for non-root user
 ENV HOME=/home/app_user \
-    CHROME_BIN=/usr/bin/google-chrome \
     DISPLAY=:99 \
     PYTHONPATH=${PYTHONPATH}:/app \
     SELENIUM_CACHE_PATH=/home/app_user/.cache/selenium
