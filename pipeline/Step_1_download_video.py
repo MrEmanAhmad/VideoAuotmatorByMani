@@ -10,24 +10,22 @@ from pathlib import Path
 from typing import Tuple, Dict, Optional, Any
 import yt_dlp
 from datetime import datetime
-import tweepy
-import requests
 import json
 
 logger = logging.getLogger(__name__)
 
 class VideoDownloader:
-    """Downloads videos using yt-dlp with fallback options."""
+    """Downloads videos using yt-dlp."""
     
     def __init__(self, output_dir: Path):
         """
         Initialize video downloader.
         
         Args:
-            output_dir: Directory to save downloaded video
+            output_dir: Directory to save downloaded videos
         """
         self.output_dir = output_dir
-        
+    
     def _normalize_url(self, url: str) -> str:
         """Normalize URL to ensure compatibility."""
         # Convert x.com to twitter.com
@@ -43,15 +41,15 @@ class VideoDownloader:
         Sanitize the filename to remove problematic characters.
         
         Args:
-            title: Original video title
+            title: Original filename
             
         Returns:
             Sanitized filename
         """
-        # Remove emojis and special characters
-        title = re.sub(r'[^\w\s-]', '', title)
-        # Replace spaces and dashes with underscores
-        title = re.sub(r'[-\s]+', '_', title)
+        # Remove invalid characters
+        title = re.sub(r'[<>:"/\\|?*]', '', title)
+        # Replace spaces and dots with underscores
+        title = re.sub(r'[\s.]+', '_', title)
         # Ensure it's not empty and not too long
         if not title:
             title = 'video'
@@ -71,17 +69,27 @@ class VideoDownloader:
             'verbose': True,
             'format': 'best',
             'nocheckcertificate': True,
-            'ignoreerrors': False,
-            'no_warnings': False,
+            'ignoreerrors': True,
+            'no_warnings': True,
+            'quiet': False,
             'extract_flat': False,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.9',
+            'cookiefile': None,
+            'source_address': '0.0.0.0',
+            'force_generic_extractor': False,
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
+            'sleep_interval_requests': 1,
+            'max_sleep_interval_requests': 5,
+            'http_chunk_size': 10485760,
+            'retries': 10,
+            'fragment_retries': 10,
+            'retry_sleep_functions': {'http': lambda n: 5},
+            'socket_timeout': 30,
+            'headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
                 'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'cross-site',
-                'Sec-Fetch-Dest': 'document',
-                'Referer': 'https://twitter.com/',
                 'Origin': 'https://twitter.com'
             },
             'postprocessors': [{
@@ -94,7 +102,7 @@ class VideoDownloader:
             opts.update({
                 'extractor_args': {
                     'twitter': {
-                        'api_key': None
+                        'api_key': None  # Let yt-dlp handle API key internally
                     }
                 },
                 'compat_opts': {
@@ -116,72 +124,10 @@ class VideoDownloader:
         if d['status'] == 'finished':
             logger.info('Download completed')
             logger.info(f'Downloaded file: {d["filename"]}')
-    
-    def _try_twitter_api_download(self, url: str) -> Tuple[bool, Optional[Dict], Optional[str]]:
-        """Try downloading Twitter video using Twitter API."""
-        try:
-            # Initialize Twitter API client if credentials are available
-            bearer_token = os.getenv('TWITTER_BEARER_TOKEN')
-            if not bearer_token:
-                return False, None, None
-                
-            client = tweepy.Client(bearer_token=bearer_token)
-            
-            # Extract tweet ID from URL
-            tweet_id = re.search(r'/status/(\d+)', url)
-            if not tweet_id:
-                return False, None, None
-                
-            tweet_id = tweet_id.group(1)
-            
-            # Get tweet info
-            tweet = client.get_tweet(
-                tweet_id,
-                expansions=['attachments.media_keys'],
-                media_fields=['url', 'variants']
-            )
-            
-            if not tweet.includes or 'media' not in tweet.includes:
-                return False, None, None
-                
-            # Get video URL from media variants
-            media = tweet.includes['media'][0]
-            if hasattr(media, 'variants'):
-                # Get highest quality video URL
-                video_url = max(
-                    (v for v in media.variants if v['content_type'] == 'video/mp4'),
-                    key=lambda x: x.get('bit_rate', 0)
-                )['url']
-                
-                # Download video
-                video_dir = self.output_dir / "video"
-                video_dir.mkdir(parents=True, exist_ok=True)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                video_path = video_dir / f'video_{timestamp}.mp4'
-                
-                response = requests.get(video_url, stream=True)
-                with open(video_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                
-                metadata = {
-                    'title': f'Twitter_Video_{tweet_id}',
-                    'description': tweet.data.text if tweet.data else '',
-                    'uploader': 'Twitter',
-                    'upload_date': ''
-                }
-                
-                return True, metadata, f'Twitter_Video_{tweet_id}'
-                
-        except Exception as e:
-            logger.error(f"Twitter API download error: {str(e)}")
-            
-        return False, None, None
                 
     def download(self, url: str) -> Tuple[bool, Optional[Dict], Optional[str]]:
         """
-        Download video from URL with fallback options.
+        Download video from URL.
         
         Args:
             url: Video URL
@@ -192,11 +138,12 @@ class VideoDownloader:
             - Video metadata (dict or None)
             - Video title (str or None)
         """
-        url = self._normalize_url(url)
-        logger.info(f"Downloading video from: {url}")
-        
-        # Try yt-dlp first
         try:
+            # Normalize URL first
+            url = self._normalize_url(url)
+            logger.info(f"Downloading video from: {url}")
+            
+            # Try yt-dlp first
             is_twitter = 'twitter.com' in url
             with yt_dlp.YoutubeDL(self._get_ydl_opts(is_twitter)) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -218,17 +165,10 @@ class VideoDownloader:
                         json.dump(metadata, f, indent=2, ensure_ascii=False)
                     
                     return True, metadata, self._sanitize_filename(info.get('title', 'video'))
-                    
+                
         except Exception as e:
             logger.error(f"yt-dlp download error: {str(e)}")
             
-            # For Twitter videos, try Twitter API as fallback
-            if 'twitter.com' in url:
-                logger.info("Attempting Twitter API fallback...")
-                success, metadata, title = self._try_twitter_api_download(url)
-                if success:
-                    return success, metadata, title
-        
         return False, None, None
 
 def execute_step(url_or_path: str, output_dir: Path) -> Tuple[bool, Optional[Dict], Optional[str]]:
@@ -245,43 +185,8 @@ def execute_step(url_or_path: str, output_dir: Path) -> Tuple[bool, Optional[Dic
         - Video metadata (dict or None)
         - Video title (str or None)
     """
-    # Check if input is a local file
-    if os.path.isfile(url_or_path):
-        try:
-            # Create video directory
-            video_dir = output_dir / "video"
-            video_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Copy file to output directory
-            import shutil
-            filename = os.path.basename(url_or_path)
-            sanitized_name = VideoDownloader(output_dir)._sanitize_filename(filename)
-            dest_path = video_dir / f"{sanitized_name}.mp4"
-            shutil.copy2(url_or_path, dest_path)
-            
-            # Create basic metadata
-            metadata = {
-                'title': sanitized_name,
-                'duration': 0,  # Will be updated later
-                'description': 'Local video file',
-                'uploader': 'Local',
-                'upload_date': ''
-            }
-            
-            return True, metadata, sanitized_name
-            
-        except Exception as e:
-            logger.error(f"Error copying local file: {str(e)}")
-            return False, None, None
-    
-    # Download from URL
     downloader = VideoDownloader(output_dir)
-    success, metadata, video_title = downloader.download(url_or_path)
-    
-    if not success:
-        logger.error("Video download failed")
-        
-    return success, metadata, video_title 
+    return downloader.download(url_or_path)
 
 async def download_from_url(url: str, output_dir: Path) -> str:
     """
