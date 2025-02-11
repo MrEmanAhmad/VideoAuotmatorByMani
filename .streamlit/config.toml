@@ -2,10 +2,15 @@
 enableCORS = false
 enableXsrfProtection = false
 headless = true
+maxUploadSize = 50
+maxMessageSize = 200
+enableWebsocketCompression = true
+runOnSave = true
 
 [browser]
 gatherUsageStats = false
 serverAddress = "0.0.0.0"
+serverPort = 8501
 
 [theme]
 primaryColor = "#2196F3"
@@ -15,4 +20,13 @@ textColor = "#262730"
 font = "sans serif"
 
 [logger]
-level = "info" 
+level = "info"
+messageFormat = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[runner]
+magicEnabled = true
+fastReruns = true
+
+[client]
+showErrorDetails = true
+toolbarMode = "minimal" 
