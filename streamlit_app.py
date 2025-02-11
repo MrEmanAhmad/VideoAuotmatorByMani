@@ -373,15 +373,65 @@ try:
                 max-height: 80vh;
                 border-radius: 10px;
             }
+
+            /* Center all content and animations */
+            .stApp {
+                max-width: 100%;
+                margin: 0 auto;
+                text-align: center;
+            }
+
+            /* Center status messages and emojis */
+            .stMarkdown {
+                text-align: center;
+            }
+            
+            /* Make status messages stand out */
+            .status-message {
+                background-color: rgba(255, 255, 255, 0.1);
+                padding: 1rem;
+                border-radius: 10px;
+                margin: 1rem auto;
+                max-width: 600px;
+                text-align: center;
+            }
+
+            /* Video duration warning */
+            .duration-warning {
+                color: #ff4b4b;
+                background-color: rgba(255, 75, 75, 0.1);
+                padding: 0.5rem;
+                border-radius: 5px;
+                margin: 0.5rem auto;
+                max-width: 600px;
+                font-weight: bold;
+                text-align: center;
+            }
+
+            /* Center emojis and make them larger */
+            .emoji-large {
+                font-size: 2rem;
+                text-align: center;
+                display: block;
+                margin: 1rem auto;
+            }
             </style>
         """, unsafe_allow_html=True)
         
         # Title and description
         st.title("🎬 AI Video Commentary Bot")
+        st.markdown("<div class='emoji-large'>✨</div>", unsafe_allow_html=True)
         st.markdown("""
             Transform your videos with AI-powered commentary in multiple styles and languages.
             Upload a video or provide a URL to get started!
         """)
+        
+        # Add duration warning
+        st.markdown("<div class='duration-warning'>⚠️ Videos must be 2 minutes or shorter</div>", unsafe_allow_html=True)
+        
+        # Update status messages to use centered styling
+        if st.session_state.get('status'):
+            st.markdown(f"<div class='status-message'>{st.session_state.status}</div>", unsafe_allow_html=True)
         
         # Sidebar for settings
         with st.sidebar:

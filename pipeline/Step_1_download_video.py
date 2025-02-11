@@ -14,6 +14,9 @@ import json
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MAX_VIDEO_DURATION = 120  # Maximum video duration in seconds (2 minutes)
+
 class VideoDownloader:
     """Downloads videos using yt-dlp."""
     
@@ -143,7 +146,14 @@ class VideoDownloader:
             url = self._normalize_url(url)
             logger.info(f"Downloading video from: {url}")
             
-            # Try yt-dlp first
+            # First extract info without downloading to check duration
+            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if info and info.get('duration', 0) > MAX_VIDEO_DURATION:
+                    logger.error(f"Video duration ({info['duration']} seconds) exceeds maximum allowed duration ({MAX_VIDEO_DURATION} seconds)")
+                    return False, None, None
+            
+            # If duration is acceptable, proceed with download
             is_twitter = 'twitter.com' in url
             with yt_dlp.YoutubeDL(self._get_ydl_opts(is_twitter)) as ydl:
                 info = ydl.extract_info(url, download=True)
