@@ -92,20 +92,54 @@ try:
         # Set up Google credentials
         if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
             try:
+                # Create credentials directory with proper permissions
                 creds_dir = Path("credentials")
-                creds_dir.mkdir(exist_ok=True)
+                creds_dir.mkdir(exist_ok=True, mode=0o777)
                 
                 google_creds_file = creds_dir / "google_credentials.json"
-                creds_json = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
                 
+                # Get credentials JSON and ensure it's properly formatted
+                creds_json_str = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"]
+                try:
+                    # Try to parse as a string first
+                    creds_json = json.loads(creds_json_str)
+                except json.JSONDecodeError:
+                    # If that fails, try to evaluate as a Python literal (in case it's already a dict)
+                    import ast
+                    creds_json = ast.literal_eval(creds_json_str)
+                
+                # Validate required fields
+                required_fields = [
+                    "type", "project_id", "private_key_id", "private_key",
+                    "client_email", "client_id", "auth_uri", "token_uri",
+                    "auth_provider_x509_cert_url", "client_x509_cert_url"
+                ]
+                missing_fields = [field for field in required_fields if field not in creds_json]
+                if missing_fields:
+                    raise ValueError(f"Missing required fields in credentials: {', '.join(missing_fields)}")
+                
+                # Write credentials file with proper permissions
                 with open(google_creds_file, 'w') as f:
                     json.dump(creds_json, f, indent=2)
                 
+                # Set file permissions
+                google_creds_file.chmod(0o600)
+                
+                # Set environment variable to absolute path
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
                 logger.info("✓ Google credentials configured successfully")
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON format in credentials: {e}")
+                st.error("⚠️ Error: Google credentials JSON is not properly formatted. Please check the credential format.")
+                st.stop()
+            except ValueError as e:
+                logger.error(f"Invalid credentials content: {e}")
+                st.error(f"⚠️ Error: {str(e)}")
+                st.stop()
             except Exception as e:
                 logger.error(f"Error setting up Google credentials: {e}")
-                st.error("⚠️ Error setting up Google credentials. Please check the credential format.")
+                st.error("⚠️ Error setting up Google credentials. Please check the logs for details.")
                 st.stop()
 
         # Continue with the rest of the imports and initialization
