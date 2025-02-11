@@ -5,12 +5,10 @@ FROM python:3.10-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/app \
-    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
-    STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
-    STREAMLIT_SERVER_PORT=8501 \
-    STREAMLIT_SERVER_HEADLESS=true \
-    STREAMLIT_THEME_BASE=light
+    PYTHONPATH=/app
+
+# Create a non-root user
+RUN useradd -m -s /bin/bash app_user
 
 # Install system dependencies and Chrome
 RUN apt-get update && apt-get install -y \
@@ -27,51 +25,37 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
-# Set display port to avoid crash
-ENV DISPLAY=:99
-
-# Create non-root user
-RUN useradd -m -s /bin/bash streamlit_user && \
-    mkdir -p /app && \
-    chown -R streamlit_user:streamlit_user /app
-
 # Set working directory
 WORKDIR /app
 
-# Switch to non-root user
-USER streamlit_user
-
 # Copy requirements first for better caching
-COPY --chown=streamlit_user:streamlit_user requirements.txt .
+COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Create Streamlit config directory and add config
+RUN mkdir -p /home/app_user/.streamlit && \
+    echo '[server]\nenableCORS = false\nenableXsrfProtection = false\nheadless = true\n\n[browser]\ngatherUsageStats = false\n\n[theme]\nprimaryColor = "#2196F3"\nbackgroundColor = "#FFFFFF"\nsecondaryBackgroundColor = "#F0F2F6"\ntextColor = "#262730"\nfont = "sans serif"' > /home/app_user/.streamlit/config.toml
+
 # Copy the entire application
-COPY --chown=streamlit_user:streamlit_user . .
+COPY . .
 
-# Create necessary directories with correct permissions
-RUN mkdir -p credentials && \
-    mkdir -p analysis_temp && \
-    mkdir -p ~/.config/google-chrome && \
-    mkdir -p ~/.streamlit
+# Create necessary directories with proper permissions
+RUN mkdir -p credentials analysis_temp && \
+    mkdir -p /home/app_user/.config/google-chrome && \
+    chown -R app_user:app_user /app credentials analysis_temp /home/app_user/.config /home/app_user/.streamlit && \
+    chmod -R 755 /app pipeline && \
+    chmod -R 777 credentials analysis_temp /home/app_user/.config /home/app_user/.streamlit
 
-# Create Streamlit config
-RUN echo '\
-[general]\n\
-email = ""\n\
-showWarningOnDirectExecution = false\n\
-\n\
-[server]\n\
-enableCORS = false\n\
-enableXsrfProtection = false\n\
-\n\
-[browser]\n\
-gatherUsageStats = false\n\
-serverAddress = "0.0.0.0"\n\
-serverPort = 8501\n\
-' > ~/.streamlit/config.toml
+# Switch to non-root user
+USER app_user
+
+# Set Chrome configuration for non-root user
+ENV HOME=/home/app_user \
+    CHROME_BIN=/usr/bin/google-chrome \
+    DISPLAY=:99
 
 # Expose Streamlit port
 EXPOSE 8501
@@ -81,4 +65,4 @@ ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8
 
 # Command to run Streamlit
-CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"] 
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"] 
