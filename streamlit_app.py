@@ -28,37 +28,55 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load railway.json configuration first
+# Set page config first to avoid StreamlitAPIException
+st.set_page_config(
+    page_title="AI Video Commentary Bot",
+    page_icon="🎬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Load railway.json configuration
 railway_file = Path("railway.json")
 if railway_file.exists():
-    with open(railway_file, 'r') as f:
-        config = json.load(f)
-    
-    # Set up environment variables from railway.json
-    for key, value in config.items():
-        os.environ[key] = value
-    
-    # Set up Google credentials
-    if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in config:
-        # Create credentials directory if it doesn't exist
-        creds_dir = Path("credentials")
-        creds_dir.mkdir(exist_ok=True)
+    try:
+        with open(railway_file, 'r') as f:
+            config = json.load(f)
         
-        # Parse and save Google credentials
-        creds_json = json.loads(config["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
-        google_creds_file = creds_dir / "google_credentials.json"
-        with open(google_creds_file, 'w') as f:
-            json.dump(creds_json, f, indent=2)
+        # Set up environment variables from railway.json
+        for key, value in config.items():
+            os.environ[key] = value
         
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
+        # Set up Google credentials
+        if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in config:
+            # Create credentials directory if it doesn't exist
+            creds_dir = Path("credentials")
+            creds_dir.mkdir(exist_ok=True)
+            
+            # Parse and save Google credentials
+            creds_json = json.loads(config["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+            google_creds_file = creds_dir / "google_credentials.json"
+            with open(google_creds_file, 'w') as f:
+                json.dump(creds_json, f, indent=2)
+            
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
+    except Exception as e:
+        logger.error(f"Error loading configuration: {e}")
+        st.error("Failed to load configuration. Please check your deployment settings.")
+        st.stop()
 else:
     logger.error("railway.json not found")
     st.error("Configuration file (railway.json) not found. Please check your deployment settings.")
     st.stop()
 
 # Now import VideoBot after environment is configured
-from new_bot import VideoBot
-from pipeline import Step_1_download_video, Step_7_cleanup
+try:
+    from new_bot import VideoBot
+    from pipeline import Step_1_download_video, Step_7_cleanup
+except Exception as e:
+    logger.error(f"Failed to import required modules: {e}")
+    st.error("Failed to initialize required components. Please check your installation.")
+    st.stop()
 
 # Initialize VideoBot with proper caching
 @st.cache_resource(show_spinner=False)
@@ -104,21 +122,12 @@ if not st.session_state.initialized:
         st.session_state.is_processing = False
         st.session_state.progress = 0
         st.session_state.status = ""
-        cleanup_memory(force=True)
         st.session_state.initialized = True
         logger.info("Session state initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize session state: {e}")
         st.error("Failed to initialize application state. Please refresh the page.")
         st.stop()
-
-# Set page config
-st.set_page_config(
-    page_title="AI Video Commentary Bot",
-    page_icon="🎬",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Custom CSS with mobile responsiveness and centered content
 st.markdown("""
