@@ -8,7 +8,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     PORT=8501 \
     RAILWAY_ENVIRONMENT=production \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    CHROME_VERSION="121.0.6167.85-1" \
+    CHROMEDRIVER_VERSION="121.0.6167.85"
 
 # Create a non-root user
 RUN useradd -m -s /bin/bash app_user
@@ -35,21 +37,40 @@ RUN apt-get update && apt-get install -y \
     default-jdk \
     apt-transport-https \
     ca-certificates \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome and ChromeDriver
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1) \
-    && CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}") \
-    && wget -q --continue -P /chromedriver "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip" \
-    && unzip /chromedriver/chromedriver_linux64.zip -d /usr/local/bin/ \
-    && rm /chromedriver/chromedriver_linux64.zip \
-    && chmod +x /usr/local/bin/chromedriver \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /chromedriver
+# Install Chrome and ChromeDriver with specific versions
+RUN mkdir -p /tmp/chrome && \
+    cd /tmp/chrome && \
+    wget -q https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROME_VERSION}_amd64.deb && \
+    apt-get update && \
+    apt-get install -y ./google-chrome-stable_${CHROME_VERSION}_amd64.deb && \
+    rm -rf /tmp/chrome && \
+    wget -q --continue -P /tmp "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip" && \
+    unzip /tmp/chromedriver_linux64.zip -d /usr/local/bin/ && \
+    rm /tmp/chromedriver_linux64.zip && \
+    chmod +x /usr/local/bin/chromedriver && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    google-chrome --version && \
+    chromedriver --version
 
 # Set working directory
 WORKDIR /app
