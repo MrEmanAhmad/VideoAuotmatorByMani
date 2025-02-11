@@ -35,23 +35,16 @@ RUN apt-get update && apt-get install -y \
     default-jdk \
     apt-transport-https \
     ca-certificates \
+    chromium-chromedriver \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome with version 121 (stable version)
+# Install Chrome
 RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# Install specific version of ChromeDriver (matching Chrome 121)
-RUN CHROMEDRIVER_VERSION="121.0.6167.85" \
-    && wget -q "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip" \
-    && unzip chromedriver_linux64.zip -d /usr/local/bin/ \
-    && rm chromedriver_linux64.zip \
-    && chmod +x /usr/local/bin/chromedriver \
-    && chown root:root /usr/local/bin/chromedriver
 
 # Set working directory
 WORKDIR /app
@@ -88,15 +81,16 @@ RUN chown -R app_user:app_user /app \
     credentials \
     analysis_temp \
     sample_generated_videos \
-    /usr/local/bin/chromedriver && \
-    chmod -R 755 /app pipeline && \
+    && chmod -R 755 /app pipeline && \
     chmod -R 777 credentials \
     analysis_temp \
     sample_generated_videos \
     /home/app_user/.config \
     /home/app_user/.streamlit \
-    /home/app_user/.cache \
-    /usr/local/bin/chromedriver
+    /home/app_user/.cache
+
+# Create symlink for ChromeDriver
+RUN ln -sf /usr/lib/chromium-browser/chromedriver /usr/local/bin/chromedriver
 
 # Switch to non-root user
 USER app_user
