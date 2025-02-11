@@ -296,11 +296,19 @@ with tab1:
         else:
             st.video(uploaded_file)
             if st.button("Process Video", key="process_upload"):
-                st.session_state.is_processing = True
-                st.session_state.progress = 0
-                st.session_state.status = "Starting video processing..."
-                # Run video processing
-                asyncio.run(process_video())
+                if not st.session_state.is_processing:
+                    st.session_state.is_processing = True
+                    st.session_state.progress = 0
+                    st.session_state.status = "Starting video processing..."
+                    try:
+                        # Run video processing
+                        asyncio.run(process_video())
+                    except Exception as e:
+                        logger.error(f"Error in process_upload: {str(e)}")
+                        st.error("❌ Failed to process video. Please try again.")
+                        st.session_state.is_processing = False
+                else:
+                    st.warning("⚠️ Already processing a video. Please wait.")
 
 # Video URL Tab
 with tab2:
@@ -315,29 +323,19 @@ with tab2:
             if not video_url.startswith(('http://', 'https://')):
                 st.error("❌ Please provide a valid URL starting with http:// or https://")
             else:
-                st.session_state.is_processing = True
-                st.session_state.progress = 0
-                st.session_state.status = "Starting video processing..."
-                # Run video processing
-                asyncio.run(process_video())
-
-# Add this function for memory cleanup
-def cleanup_memory():
-    """Force garbage collection and clear memory"""
-    gc.collect()
-    if hasattr(st.session_state, 'output_filename') and st.session_state.output_filename:
-        try:
-            os.remove(st.session_state.output_filename)
-        except:
-            pass
-    
-    # Clear any temp directories
-    for path in Path().glob("temp_*"):
-        if path.is_dir():
-            shutil.rmtree(path, ignore_errors=True)
-    for path in Path().glob("output_*"):
-        if path.is_dir():
-            shutil.rmtree(path, ignore_errors=True)
+                if not st.session_state.is_processing:
+                    st.session_state.is_processing = True
+                    st.session_state.progress = 0
+                    st.session_state.status = "Starting video processing..."
+                    try:
+                        # Run video processing
+                        asyncio.run(process_video())
+                    except Exception as e:
+                        logger.error(f"Error in process_url: {str(e)}")
+                        st.error("❌ Failed to process video URL. Please try again.")
+                        st.session_state.is_processing = False
+                else:
+                    st.warning("⚠️ Already processing a video. Please wait.")
 
 # Initialize bot with caching
 bot = init_bot()
