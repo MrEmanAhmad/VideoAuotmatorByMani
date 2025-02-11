@@ -17,6 +17,17 @@ import logging
 import sys
 sys.path.append(str(Path(__file__).parent))
 
+# Setup logging first
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('streamlit_app.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Load railway.json configuration first
 railway_file = Path("railway.json")
 if railway_file.exists():
@@ -41,23 +52,72 @@ if railway_file.exists():
         
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
 else:
-    raise ValueError("railway.json not found")
+    logger.error("railway.json not found")
+    st.error("Configuration file (railway.json) not found. Please check your deployment settings.")
+    st.stop()
 
 # Now import VideoBot after environment is configured
 from new_bot import VideoBot
 from pipeline import Step_1_download_video, Step_7_cleanup
 
-# Initialize VideoBot
-@st.cache_resource
+# Initialize VideoBot with proper caching
+@st.cache_resource(show_spinner=False)
 def init_bot():
     """Initialize the VideoBot instance with caching"""
-    return VideoBot()
+    try:
+        return VideoBot()
+    except Exception as e:
+        logger.error(f"Failed to initialize VideoBot: {e}")
+        st.error("Failed to initialize the application. Please check your configuration.")
+        st.stop()
+
+# Safe cleanup function
+def cleanup_memory(force=False):
+    """Force garbage collection and clear memory"""
+    try:
+        if force or not st.session_state.get('is_processing', False):
+            gc.collect()
+            
+            # Clear temp directories that are older than 1 hour
+            current_time = datetime.now().timestamp()
+            for pattern in ['temp_*', 'output_*']:
+                for path in Path().glob(pattern):
+                    try:
+                        if path.is_dir():
+                            # Check if directory is older than 1 hour
+                            if current_time - path.stat().st_mtime > 3600:
+                                shutil.rmtree(path, ignore_errors=True)
+                    except Exception as e:
+                        logger.warning(f"Failed to remove directory {path}: {e}")
+            
+            logger.info("Cleanup completed successfully")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+
+# Initialize session state safely
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = False
+
+if not st.session_state.initialized:
+    try:
+        st.session_state.settings = init_bot().default_settings.copy()
+        st.session_state.is_processing = False
+        st.session_state.progress = 0
+        st.session_state.status = ""
+        cleanup_memory(force=True)
+        st.session_state.initialized = True
+        logger.info("Session state initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize session state: {e}")
+        st.error("Failed to initialize application state. Please refresh the page.")
+        st.stop()
 
 # Set page config
 st.set_page_config(
     page_title="AI Video Commentary Bot",
     page_icon="🎬",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Custom CSS with mobile responsiveness and centered content
@@ -168,23 +228,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Add this at the start after imports
-def init_session_state():
-    if 'settings' not in st.session_state:
-        st.session_state.settings = init_bot().default_settings.copy()
-    if 'processing' not in st.session_state:
-        st.session_state.processing = False
-    if 'progress' not in st.session_state:
-        st.session_state.progress = 0
-    if 'status' not in st.session_state:
-        st.session_state.status = ""
-    if 'initialized' not in st.session_state:
-        cleanup_memory()
-        st.session_state.initialized = True
-
-# Initialize session state
-init_session_state()
-
 # Title and description
 st.title("🎬 AI Video Commentary Bot")
 st.markdown("""
@@ -253,7 +296,7 @@ with tab1:
         else:
             st.video(uploaded_file)
             if st.button("Process Video", key="process_upload"):
-                st.session_state.processing = True
+                st.session_state.is_processing = True
                 st.session_state.progress = 0
                 st.session_state.status = "Starting video processing..."
                 # Run video processing
@@ -272,7 +315,7 @@ with tab2:
             if not video_url.startswith(('http://', 'https://')):
                 st.error("❌ Please provide a valid URL starting with http:// or https://")
             else:
-                st.session_state.processing = True
+                st.session_state.is_processing = True
                 st.session_state.progress = 0
                 st.session_state.status = "Starting video processing..."
                 # Run video processing
@@ -342,17 +385,6 @@ with st.expander("ℹ️ Help & Information"):
         - Checking your internet connection
         - Refreshing the page
     """)
-
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('streamlit_app.log')
-    ]
-)
-logger = logging.getLogger(__name__)
 
 # Add these classes before the process_video function
 class StreamlitMessage:
@@ -428,10 +460,16 @@ class StreamlitContext:
         self.chat_data = {}
         self.bot_data = {}
 
-# Modify the process_video function to include more logging
+# Modify the process_video function to be more robust
 async def process_video():
+    if st.session_state.is_processing:
+        logger.warning("Already processing a video")
+        return
+        
+    st.session_state.is_processing = True
     cleanup_task = None
     output_dir = None
+    
     try:
         logger.info("Starting video processing")
         # Create output directory with timestamp
@@ -519,10 +557,7 @@ async def process_video():
     except Exception as e:
         logger.error(f"Error processing video: {str(e)}", exc_info=True)
         st.error(f"❌ Error processing video: {str(e)}")
-        cleanup_memory()
     finally:
-        cleanup_memory()
-        st.session_state.processing = False
-        logger.info("Video processing completed")
-
-# Remove the unconditional asyncio.run(process_video()) at the end of the file 
+        st.session_state.is_processing = False
+        cleanup_memory(force=True)
+        logger.info("Video processing completed") 
