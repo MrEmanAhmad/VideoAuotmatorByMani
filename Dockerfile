@@ -5,7 +5,12 @@ FROM python:3.10-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
+    STREAMLIT_SERVER_PORT=8501 \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_THEME_BASE=light
 
 # Install system dependencies and Chrome
 RUN apt-get update && apt-get install -y \
@@ -25,25 +30,48 @@ RUN apt-get update && apt-get install -y \
 # Set display port to avoid crash
 ENV DISPLAY=:99
 
+# Create non-root user
+RUN useradd -m -s /bin/bash streamlit_user && \
+    mkdir -p /app && \
+    chown -R streamlit_user:streamlit_user /app
+
 # Set working directory
 WORKDIR /app
 
+# Switch to non-root user
+USER streamlit_user
+
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY --chown=streamlit_user:streamlit_user requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy the entire application
-COPY . .
+COPY --chown=streamlit_user:streamlit_user . .
 
-# Create necessary directories and set permissions
+# Create necessary directories with correct permissions
 RUN mkdir -p credentials && \
     mkdir -p analysis_temp && \
-    mkdir -p /root/.config/google-chrome && \
-    chmod -R 777 credentials analysis_temp /root/.config/google-chrome && \
-    chmod -R 755 pipeline
+    mkdir -p ~/.config/google-chrome && \
+    mkdir -p ~/.streamlit
+
+# Create Streamlit config
+RUN echo '\
+[general]\n\
+email = ""\n\
+showWarningOnDirectExecution = false\n\
+\n\
+[server]\n\
+enableCORS = false\n\
+enableXsrfProtection = false\n\
+\n\
+[browser]\n\
+gatherUsageStats = false\n\
+serverAddress = "0.0.0.0"\n\
+serverPort = 8501\n\
+' > ~/.streamlit/config.toml
 
 # Expose Streamlit port
 EXPOSE 8501
@@ -53,4 +81,4 @@ ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8
 
 # Command to run Streamlit
-CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"] 
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"] 

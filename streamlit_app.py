@@ -1,17 +1,18 @@
 import streamlit as st
 import os
+import sys
+import logging
 from pathlib import Path
 import json
 import tempfile
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import shutil
 from telegram.ext import ContextTypes
 from telegram import Bot
 import gc
 import tracemalloc
 import psutil
-import logging
 
 # Disable Streamlit's welcome message
 st.set_option('client.showErrorDetails', False)
@@ -19,338 +20,121 @@ st.set_option('server.enableCORS', False)
 st.set_option('server.enableXsrfProtection', False)
 st.set_option('browser.gatherUsageStats', False)
 
-# Set page config first to avoid StreamlitAPIException
-st.set_page_config(
-    page_title="AI Video Commentary Bot",
-    page_icon="🎬",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': None,
-        'About': None
-    }
-)
-
-# Add the current directory to Python path
-import sys
-sys.path.append(str(Path(__file__).parent))
-
-# Setup logging first
+# Configure logging first
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(),
+        logging.StreamHandler(sys.stdout),
         logging.FileHandler('streamlit_app.log')
     ]
 )
 logger = logging.getLogger(__name__)
 
-# Load railway.json configuration
+# Streamlit configuration
 try:
-    railway_file = Path("railway.json")
-    if not railway_file.exists():
-        raise FileNotFoundError("railway.json not found")
-        
-    with open(railway_file, 'r') as f:
-        config = json.load(f)
-    
-    # Set up environment variables from railway.json
-    for key, value in config.items():
-        os.environ[key] = value
-    
-    # Set up Google credentials
-    if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in config:
-        creds_dir = Path("credentials")
-        creds_dir.mkdir(exist_ok=True)
-        
-        google_creds_file = creds_dir / "google_credentials.json"
-        with open(google_creds_file, 'w') as f:
-            json.dump(json.loads(config["GOOGLE_APPLICATION_CREDENTIALS_JSON"]), f, indent=2)
-        
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
-        
+    st.set_page_config(
+        page_title="Video Processor",
+        page_icon="🎥",
+        layout="wide",
+        initial_sidebar_state="expanded",
+        menu_items=None
+    )
 except Exception as e:
-    logger.error(f"Configuration error: {e}")
-    st.error("⚠️ Failed to load configuration. Please check deployment settings.")
-    st.stop()
+    logger.error(f"Failed to set page config: {str(e)}")
+    sys.exit(1)
 
 # Import required modules
 try:
     from new_bot import VideoBot
-    from pipeline import Step_1_download_video, Step_7_cleanup
-except Exception as e:
-    logger.error(f"Import error: {e}")
-    st.error("⚠️ Failed to load required components. Please check installation.")
-    st.stop()
+    import json
+    import shutil
+    from datetime import datetime, timedelta
+except ImportError as e:
+    logger.error(f"Failed to import required modules: {str(e)}")
+    st.error(f"Failed to import required modules: {str(e)}")
+    sys.exit(1)
 
-# Initialize VideoBot with proper caching
-@st.cache_resource(show_spinner=False)
-def init_bot():
-    """Initialize the VideoBot instance with caching"""
-    try:
-        return VideoBot()
-    except Exception as e:
-        logger.error(f"Bot initialization error: {e}")
-        st.error("⚠️ Failed to initialize the application.")
-        st.stop()
-
-# Initialize bot instance early
-try:
-    bot = init_bot()
-except Exception as e:
-    logger.error(f"Failed to create bot instance: {e}")
-    st.error("⚠️ Application initialization failed.")
-    st.stop()
-
-# Initialize session state safely
+# Initialize session state
 if 'initialized' not in st.session_state:
     st.session_state.initialized = False
-    st.session_state.settings = bot.default_settings.copy()
-    st.session_state.is_processing = False
-    st.session_state.progress = 0
-    st.session_state.status = ""
+    st.session_state.processing = False
+    st.session_state.bot = None
+    st.session_state.error = None
 
-# Safe cleanup function
-def cleanup_memory(force=False):
-    """Force garbage collection and clear memory"""
+def init_bot():
+    """Initialize the VideoBot with proper error handling"""
+    if not st.session_state.initialized:
+        try:
+            config_path = Path("railway.json")
+            if not config_path.exists():
+                raise FileNotFoundError("railway.json not found")
+            
+            with open(config_path) as f:
+                config = json.load(f)
+            
+            st.session_state.bot = VideoBot(config)
+            st.session_state.initialized = True
+            logger.info("VideoBot initialized successfully")
+        except Exception as e:
+            error_msg = f"Failed to initialize VideoBot: {str(e)}"
+            logger.error(error_msg)
+            st.session_state.error = error_msg
+            return False
+    return True
+
+def cleanup_memory():
+    """Clean up temporary files and directories"""
     try:
-        if force or not st.session_state.get('is_processing', False):
-            gc.collect()
-            
-            # Clear temp directories that are older than 1 hour
-            current_time = datetime.now().timestamp()
-            for pattern in ['temp_*', 'output_*']:
-                for path in Path().glob(pattern):
-                    try:
-                        if path.is_dir():
-                            # Check if directory is older than 1 hour
-                            if current_time - path.stat().st_mtime > 3600:
-                                shutil.rmtree(path, ignore_errors=True)
-                    except Exception as e:
-                        logger.warning(f"Failed to remove directory {path}: {e}")
-            
+        # Only clean if we're not processing
+        if not st.session_state.processing:
+            temp_dir = Path("analysis_temp")
+            if temp_dir.exists():
+                # Remove directories older than 1 hour
+                current_time = datetime.now()
+                for item in temp_dir.glob("*"):
+                    if item.is_dir():
+                        dir_time = datetime.fromtimestamp(item.stat().st_mtime)
+                        if current_time - dir_time > timedelta(hours=1):
+                            shutil.rmtree(item, ignore_errors=True)
             logger.info("Cleanup completed successfully")
     except Exception as e:
-        logger.error(f"Error during cleanup: {e}")
+        logger.error(f"Error during cleanup: {str(e)}")
 
-# Custom CSS with mobile responsiveness and centered content
-st.markdown("""
-    <style>
-    /* Center content and add responsive design */
-    .main-content {
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 1rem;
-    }
+# Main app
+try:
+    st.title("Video Processor")
     
-    .stButton>button {
-        width: 100%;
-        height: 3em;
-        margin-top: 1em;
-    }
+    if not init_bot():
+        st.error(st.session_state.error)
+        st.stop()
     
-    /* Processing animation container */
-    .processing-container {
-        text-align: center;
-        padding: 2rem;
-        margin: 2rem auto;
-        max-width: 90%;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 1rem;
-        backdrop-filter: blur(10px);
-    }
+    # Video URL input
+    video_url = st.text_input("Enter YouTube Video URL")
     
-    /* Telegram-style animations */
-    .telegram-animation {
-        font-size: 3rem;
-        margin: 1rem 0;
-        animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); }
-    }
-    
-    /* Video container */
-    .video-container {
-        position: relative;
-        width: 100%;
-        max-width: 800px;
-        margin: 0 auto;
-        border-radius: 1rem;
-        overflow: hidden;
-    }
-    
-    .video-container video {
-        width: 100%;
-        height: auto;
-        border-radius: 1rem;
-    }
-    
-    /* Download button styling */
-    .download-btn {
-        background: linear-gradient(45deg, #2196F3, #00BCD4);
-        color: white;
-        padding: 1rem 2rem;
-        border-radius: 2rem;
-        border: none;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        transition: all 0.3s ease;
-        width: 100%;
-        max-width: 300px;
-        margin: 1rem auto;
-        display: block;
-    }
-    
-    .download-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 8px rgba(0,0,0,0.2);
-    }
-    
-    /* Mobile optimization */
-    @media (max-width: 768px) {
-        .main-content {
-            padding: 0.5rem;
-        }
-        
-        .processing-container {
-            padding: 1rem;
-            margin: 1rem auto;
-        }
-        
-        .telegram-animation {
-            font-size: 2rem;
-        }
-    }
-    
-    /* Status messages */
-    .status-message {
-        text-align: center;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-radius: 0.5rem;
-        background: rgba(255, 255, 255, 0.1);
-    }
-    
-    /* Progress bar */
-    .stProgress > div > div {
-        background-color: #2196F3;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# Title and description
-st.title("🎬 AI Video Commentary Bot")
-st.markdown("""
-    Transform your videos with AI-powered commentary in multiple styles and languages.
-    Upload a video or provide a URL to get started!
-""")
-
-# Sidebar for settings
-with st.sidebar:
-    st.header("⚙️ Settings")
-    
-    # Style selection
-    st.subheader("Commentary Style")
-    style = st.selectbox(
-        "Choose your style",
-        options=list(init_bot().styles.keys()),
-        format_func=lambda x: f"{init_bot().styles[x]['icon']} {init_bot().styles[x]['name']}",
-        key="style"
-    )
-    st.caption(init_bot().styles[style]['description'])
-    
-    # AI Model selection
-    st.subheader("AI Model")
-    llm = st.selectbox(
-        "Choose AI model",
-        options=list(init_bot().llm_providers.keys()),
-        format_func=lambda x: f"{init_bot().llm_providers[x]['icon']} {init_bot().llm_providers[x]['name']}",
-        key="llm"
-    )
-    st.caption(init_bot().llm_providers[llm]['description'])
-    
-    # Language selection
-    st.subheader("Language")
-    available_languages = {
-        code: info for code, info in init_bot().languages.items()
-        if not info.get('requires_openai') or llm == 'openai'
-    }
-    language = st.selectbox(
-        "Choose language",
-        options=list(available_languages.keys()),
-        format_func=lambda x: f"{init_bot().languages[x]['icon']} {init_bot().languages[x]['name']}",
-        key="language"
-    )
-    
-    # Update settings in session state and bot's user settings
-    user_id = 0  # Default user ID for Streamlit interface
-    init_bot().update_user_setting(user_id, 'style', style)
-    init_bot().update_user_setting(user_id, 'llm', llm)
-    init_bot().update_user_setting(user_id, 'language', language)
-    st.session_state.settings = init_bot().get_user_settings(user_id)
-
-# Main content area
-tab1, tab2 = st.tabs(["📤 Upload Video", "🔗 Video URL"])
-
-# Upload Video Tab
-with tab1:
-    uploaded_file = st.file_uploader(
-        "Choose a video file",
-        type=['mp4', 'mov', 'avi'],
-        help="Maximum file size: 50MB"
-    )
-    
-    if uploaded_file:
-        if uploaded_file.size > init_bot().MAX_VIDEO_SIZE:
-            st.error("❌ Video is too large. Maximum size is 50MB.")
+    if st.button("Process Video", key="process_button"):
+        if st.session_state.processing:
+            st.warning("A video is already being processed. Please wait.")
+        elif not video_url:
+            st.warning("Please enter a video URL")
         else:
-            st.video(uploaded_file)
-            if st.button("Process Video", key="process_upload"):
-                if not st.session_state.is_processing:
-                    st.session_state.is_processing = True
-                    st.session_state.progress = 0
-                    st.session_state.status = "Starting video processing..."
-                    try:
-                        # Run video processing
-                        asyncio.run(process_video())
-                    except Exception as e:
-                        logger.error(f"Error in process_upload: {str(e)}")
-                        st.error("❌ Failed to process video. Please try again.")
-                        st.session_state.is_processing = False
-                else:
-                    st.warning("⚠️ Already processing a video. Please wait.")
+            try:
+                st.session_state.processing = True
+                with st.spinner("Processing video..."):
+                    result = st.session_state.bot.process_video(video_url)
+                st.success("Video processed successfully!")
+                st.json(result)
+            except Exception as e:
+                error_msg = f"Error processing video: {str(e)}"
+                logger.error(error_msg)
+                st.error(error_msg)
+            finally:
+                st.session_state.processing = False
+                cleanup_memory()
 
-# Video URL Tab
-with tab2:
-    video_url = st.text_input(
-        "Enter video URL",
-        placeholder="https://example.com/video.mp4",
-        help="Support for YouTube, Vimeo, TikTok, and more"
-    )
-    
-    if video_url:
-        if st.button("Process URL", key="process_url"):
-            if not video_url.startswith(('http://', 'https://')):
-                st.error("❌ Please provide a valid URL starting with http:// or https://")
-            else:
-                if not st.session_state.is_processing:
-                    st.session_state.is_processing = True
-                    st.session_state.progress = 0
-                    st.session_state.status = "Starting video processing..."
-                    try:
-                        # Run video processing
-                        asyncio.run(process_video())
-                    except Exception as e:
-                        logger.error(f"Error in process_url: {str(e)}")
-                        st.error("❌ Failed to process video URL. Please try again.")
-                        st.session_state.is_processing = False
-                else:
-                    st.warning("⚠️ Already processing a video. Please wait.")
+except Exception as e:
+    logger.error(f"Unexpected error in main app: {str(e)}")
+    st.error(f"An unexpected error occurred. Please try again later.")
 
 # Add memory monitoring
 if st.sidebar.checkbox("Show Memory Usage"):
@@ -472,11 +256,11 @@ class StreamlitContext:
 
 # Modify the process_video function to be more robust
 async def process_video():
-    if st.session_state.is_processing:
+    if st.session_state.processing:
         logger.warning("Already processing a video")
         return
         
-    st.session_state.is_processing = True
+    st.session_state.processing = True
     cleanup_task = None
     output_dir = None
     
@@ -568,6 +352,6 @@ async def process_video():
         logger.error(f"Error processing video: {str(e)}", exc_info=True)
         st.error(f"❌ Error processing video: {str(e)}")
     finally:
-        st.session_state.is_processing = False
-        cleanup_memory(force=True)
+        st.session_state.processing = False
+        cleanup_memory()
         logger.info("Video processing completed") 
