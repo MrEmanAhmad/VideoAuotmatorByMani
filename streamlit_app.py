@@ -11,6 +11,7 @@ from telegram import Bot
 import gc
 import tracemalloc
 import psutil
+import logging
 
 # Add the current directory to Python path
 import sys
@@ -342,27 +343,119 @@ with st.expander("ℹ️ Help & Information"):
         - Refreshing the page
     """)
 
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('streamlit_app.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Add these classes before the process_video function
+class StreamlitMessage:
+    """Mock Telegram message for status updates"""
+    def __init__(self):
+        self.message_id = 0
+        self.text = ""
+        self.video = None
+        self.file_id = None
+        self.file_name = None
+        self.mime_type = None
+        self.file_size = None
+        self.download_placeholder = st.empty()
+        self.video_placeholder = st.empty()
+        self.status_placeholder = st.empty()
+        self.output_filename = None
+        
+    async def reply_text(self, text, **kwargs):
+        logger.info(f"Status update: {text}")
+        self.text = text
+        st.session_state.status = text
+        self.status_placeholder.markdown(f"🔄 {text}")
+        return self
+        
+    async def edit_text(self, text, **kwargs):
+        return await self.reply_text(text)
+        
+    async def reply_video(self, video, caption=None, **kwargs):
+        logger.info("Handling video reply")
+        try:
+            if hasattr(video, 'read'):
+                video_data = video.read()
+            elif isinstance(video, str) and os.path.exists(video):
+                with open(video, "rb") as f:
+                    video_data = f.read()
+            else:
+                logger.error("Invalid video format")
+                st.error("Invalid video format")
+                return self
+            
+            self.video_placeholder.video(video_data)
+            if caption:
+                st.markdown(f"### {caption}")
+            return self
+            
+        except Exception as e:
+            logger.error(f"Error in reply_video: {str(e)}")
+            st.error(f"Error displaying video: {str(e)}")
+            return self
+
+class StreamlitUpdate:
+    """Mock Telegram Update for bot compatibility"""
+    def __init__(self):
+        logger.info("Initializing StreamlitUpdate")
+        self.effective_user = type('User', (), {'id': 0})
+        self.message = StreamlitMessage()
+        self.effective_message = self.message
+
+class StreamlitContext:
+    """Mock Telegram context"""
+    def __init__(self):
+        logger.info("Initializing StreamlitContext")
+        self.bot = type('MockBot', (), {
+            'get_file': lambda *args, **kwargs: None,
+            'send_message': lambda *args, **kwargs: None,
+            'edit_message_text': lambda *args, **kwargs: None,
+            'send_video': lambda *args, **kwargs: None,
+            'send_document': lambda *args, **kwargs: None
+        })()
+        self.args = []
+        self.matches = None
+        self.user_data = {}
+        self.chat_data = {}
+        self.bot_data = {}
+
+# Modify the process_video function to include more logging
 async def process_video():
     cleanup_task = None
     output_dir = None
     try:
+        logger.info("Starting video processing")
         # Create output directory with timestamp
         output_dir = Path(f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         output_dir.mkdir(exist_ok=True)
+        logger.info(f"Created output directory: {output_dir}")
         
         # Create temporary directory for processing
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir_path = Path(temp_dir)
+            logger.info(f"Created temporary directory: {temp_dir_path}")
+            
             update = StreamlitUpdate()
             context = StreamlitContext()
             
             # Handle video input
             if uploaded_file:
+                logger.info(f"Processing uploaded file: {uploaded_file.name}")
                 video_path = temp_dir_path / "input_video.mp4"
                 with open(video_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 
                 # Process the video using bot's process_video method
+                logger.info("Starting video file processing")
                 final_video = await bot.process_video_file(
                     update,
                     context,
@@ -375,19 +468,22 @@ async def process_video():
                     }
                 )
             else:
-                # Process URL using bot's process_video_from_url method
+                logger.info(f"Processing video URL: {video_url}")
                 final_video = await bot.process_video_from_url(update, context, video_url)
             
             if final_video and os.path.exists(final_video):
+                logger.info(f"Video processing complete: {final_video}")
                 # Copy final video to output directory
                 output_video = output_dir / f"final_video_{st.session_state.settings['style']}.mp4"
                 shutil.copy2(final_video, output_video)
+                logger.info(f"Copied video to output directory: {output_video}")
                 
                 try:
                     with open(output_video, "rb") as f:
                         video_data = f.read()
                     
                     # Display video using cached function
+                    logger.info("Displaying video")
                     display_video(video_data)
                     
                     # Create download button
@@ -410,19 +506,23 @@ async def process_video():
                     # Schedule cleanup
                     async def delayed_cleanup():
                         await asyncio.sleep(5)  # Give a few extra seconds after expiry
+                        logger.info("Running delayed cleanup")
                         cleanup_memory()
                     
                     cleanup_task = asyncio.create_task(delayed_cleanup())
                     
                 except Exception as e:
+                    logger.error(f"Error handling video display: {str(e)}")
                     st.error(f"Error handling video display: {str(e)}")
                     cleanup_memory()
     
     except Exception as e:
+        logger.error(f"Error processing video: {str(e)}", exc_info=True)
         st.error(f"❌ Error processing video: {str(e)}")
         cleanup_memory()
     finally:
         cleanup_memory()
         st.session_state.processing = False
+        logger.info("Video processing completed")
 
 # Remove the unconditional asyncio.run(process_video()) at the end of the file 
