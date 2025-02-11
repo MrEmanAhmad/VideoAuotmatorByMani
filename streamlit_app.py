@@ -100,13 +100,30 @@ try:
                 
                 # Get credentials JSON and ensure it's properly formatted
                 creds_json_str = os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"]
+                logger.info("Attempting to parse Google credentials...")
+                
+                # Try multiple parsing approaches
                 try:
-                    # Try to parse as a string first
+                    # First, try direct JSON parsing
                     creds_json = json.loads(creds_json_str)
-                except json.JSONDecodeError:
-                    # If that fails, try to evaluate as a Python literal (in case it's already a dict)
-                    import ast
-                    creds_json = ast.literal_eval(creds_json_str)
+                except json.JSONDecodeError as je:
+                    logger.warning(f"Direct JSON parsing failed: {je}")
+                    try:
+                        # Try cleaning the string and parsing again
+                        cleaned_str = creds_json_str.replace('\n', '\\n').replace('\r', '\\r')
+                        creds_json = json.loads(cleaned_str)
+                    except json.JSONDecodeError:
+                        logger.warning("Cleaned JSON parsing failed, trying literal eval")
+                        try:
+                            # Try literal eval as last resort
+                            import ast
+                            creds_json = ast.literal_eval(creds_json_str)
+                        except (SyntaxError, ValueError) as e:
+                            logger.error(f"All parsing attempts failed. Original error: {e}")
+                            # Log the first and last few characters of the string for debugging
+                            str_preview = f"{creds_json_str[:100]}...{creds_json_str[-100:]}" if len(creds_json_str) > 200 else creds_json_str
+                            logger.error(f"Credentials string preview: {str_preview}")
+                            raise ValueError("Could not parse Google credentials. Please check the format.")
                 
                 # Validate required fields
                 required_fields = [
@@ -117,6 +134,16 @@ try:
                 missing_fields = [field for field in required_fields if field not in creds_json]
                 if missing_fields:
                     raise ValueError(f"Missing required fields in credentials: {', '.join(missing_fields)}")
+                
+                # Ensure private key is properly formatted
+                if 'private_key' in creds_json:
+                    # Normalize line endings and ensure proper PEM format
+                    private_key = creds_json['private_key']
+                    if not private_key.startswith('-----BEGIN PRIVATE KEY-----'):
+                        private_key = f"-----BEGIN PRIVATE KEY-----\n{private_key}"
+                    if not private_key.endswith('-----END PRIVATE KEY-----'):
+                        private_key = f"{private_key}\n-----END PRIVATE KEY-----"
+                    creds_json['private_key'] = private_key.replace('\\n', '\n')
                 
                 # Write credentials file with proper permissions
                 with open(google_creds_file, 'w') as f:
