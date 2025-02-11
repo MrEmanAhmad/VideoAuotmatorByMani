@@ -403,27 +403,52 @@ try:
                 self.bot_data = {}
 
         async def process_video():
+            # Check if already processing and reset if stuck
             if st.session_state.is_processing:
-                return
+                # If stuck for more than 5 minutes, reset
+                if hasattr(st.session_state, 'processing_start_time'):
+                    if (datetime.now() - st.session_state.processing_start_time).total_seconds() > 300:
+                        st.session_state.is_processing = False
+                        logger.warning("Reset stuck processing state")
+                    else:
+                        st.warning("⚠️ Already processing a video. Please wait.")
+                        return
+                else:
+                    st.session_state.is_processing = False
             
-            st.session_state.is_processing = True
             try:
+                # Set processing start time
+                st.session_state.processing_start_time = datetime.now()
+                st.session_state.is_processing = True
+                
                 update = StreamlitUpdate()
                 context = StreamlitContext()
                 
+                # Show processing status
+                status_placeholder = st.empty()
+                status_placeholder.info("🎬 Starting video processing...")
+                
                 if video_url:
                     logger.info(f"Processing video URL: {video_url}")
+                    status_placeholder.info("📥 Downloading video from URL...")
                     await bot.process_video_from_url(update, context, video_url)
                 elif uploaded_file:
                     logger.info(f"Processing uploaded file: {uploaded_file.name}")
+                    status_placeholder.info("📥 Processing uploaded video...")
                     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
                         tmp.write(uploaded_file.getbuffer())
                         await bot.process_video_file(update, context, tmp.name, update.message)
+                
+                status_placeholder.success("✅ Processing complete!")
+                
             except Exception as e:
                 logger.error(f"Error processing video: {str(e)}")
                 st.error(f"❌ Error processing video: {str(e)}")
             finally:
+                # Clear processing state
                 st.session_state.is_processing = False
+                if hasattr(st.session_state, 'processing_start_time'):
+                    delattr(st.session_state, 'processing_start_time')
                 cleanup_memory(force=True)
         
         # Main content area
@@ -470,19 +495,27 @@ try:
                     if not video_url.startswith(('http://', 'https://')):
                         st.error("❌ Please provide a valid URL starting with http:// or https://")
                     else:
-                        if not st.session_state.is_processing:
-                            st.session_state.is_processing = True
-                            st.session_state.progress = 0
-                            st.session_state.status = "Starting video processing..."
-                            try:
+                        try:
+                            # Reset processing state if stuck
+                            if st.session_state.is_processing and hasattr(st.session_state, 'processing_start_time'):
+                                if (datetime.now() - st.session_state.processing_start_time).total_seconds() > 300:
+                                    st.session_state.is_processing = False
+                                    logger.warning("Reset stuck processing state")
+                            
+                            if not st.session_state.is_processing:
+                                st.session_state.progress = 0
+                                st.session_state.status = "Starting video processing..."
                                 # Run video processing
                                 asyncio.run(process_video())
-                            except Exception as e:
-                                logger.error(f"Error in process_url: {str(e)}")
-                                st.error("❌ Failed to process video URL. Please try again.")
-                                st.session_state.is_processing = False
-                        else:
-                            st.warning("⚠️ Already processing a video. Please wait.")
+                            else:
+                                st.warning("⚠️ Already processing a video. Please wait or refresh the page if stuck.")
+                        except Exception as e:
+                            logger.error(f"Error in process_url: {str(e)}")
+                            st.error("❌ Failed to process video URL. Please try again.")
+                            # Reset processing state on error
+                            st.session_state.is_processing = False
+                            if hasattr(st.session_state, 'processing_start_time'):
+                                delattr(st.session_state, 'processing_start_time')
         
         # Add memory monitoring
         if st.sidebar.checkbox("Show Memory Usage"):
