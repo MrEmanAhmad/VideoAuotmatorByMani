@@ -1,133 +1,80 @@
-# AI Video Commentary Bot
+# Video Automator By Mani 🎬
 
-A powerful application that adds AI-generated commentary to videos using multiple styles and languages. Available both as a Telegram bot and a Streamlit web application.
+A powerful AI-powered video commentary bot that automatically generates engaging commentary for your videos. Built with Streamlit, OpenAI, DeepSeek, and Google Cloud technologies.
 
-## 🎯 Latest Updates
+## Features ✨
 
-- ✨ Added Telegram-style animations during video processing
-- 🎨 Improved mobile-responsive UI design
-- 🚀 Optimized video processing and cleanup
-- 💾 Instant video availability after processing
-- 🔄 Automatic cleanup of temporary files
-- 📱 Enhanced mobile viewing experience
+- **Multiple Commentary Styles**: Choose from various commentary styles to match your content
+- **Multi-Language Support**: Generate commentary in different languages
+- **AI Model Selection**: Choose between different AI models for generation
+- **Professional Voice Synthesis**: High-quality voice generation
+- **Responsive Design**: Works perfectly on all devices
+- **Sample Videos**: View example videos with generated commentary
 
-## ✨ Features
+## Requirements 📋
 
-- 🎭 Multiple commentary styles (Documentary, Energetic, Analytical, Storyteller)
-- 🤖 Choice of AI models (OpenAI GPT-4, Deepseek)
-- 🌐 Multiple language support (English, Urdu)
-- 🎙️ Professional voice synthesis
-- 📤 Support for video upload and URL processing
-- 🎬 Support for various video platforms (YouTube, Vimeo, TikTok, etc.)
-- 📱 Mobile-responsive design
-- 🎨 Beautiful UI with Telegram-style animations
+- Python 3.8+
+- OpenAI API Key
+- DeepSeek API Key
+- Google Cloud Credentials
+- FFmpeg (for video processing)
 
-## 🚀 Quick Deploy to Railway
-
-1. Fork this repository to your GitHub account
-2. Create a new project on [Railway](https://railway.app/)
-3. Connect your GitHub repository to Railway
-4. Add the following environment variables in Railway:
-   - `OPENAI_API_KEY`
-   - `DEEPSEEK_API_KEY`
-   - `GOOGLE_APPLICATION_CREDENTIALS_JSON` (entire JSON content)
-   - Other variables from `.env.example`
-5. Deploy! Railway will automatically build and deploy your app
-
-Your app will be available at: `https://your-project-name.railway.app`
-
-## 🛠️ Prerequisites
-
-- Python 3.8 or higher
-- OpenAI API key
-- Deepseek API key
-- Google Cloud credentials (for Text-to-Speech)
-- Telegram Bot Token (for Telegram bot only)
-
-## 📦 Installation
+## Installation 🚀
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd <repository-directory>
+git clone https://github.com/MrEmanAhmad/VideoAuotmatorByMani.git
+cd VideoAuotmatorByMani
 ```
 
-2. Install dependencies:
+2. Create and activate a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Set up environment variables:
-Copy `.env.example` to `.env` and fill in your values:
-```bash
-cp .env.example .env
-```
+4. Set up environment variables:
+   - Create a `.env` file based on `.env.example`
+   - Add your API keys and credentials
 
-4. Set up configuration:
-Copy `railway.json.example` to `railway.json` and update with your credentials:
-```bash
-cp railway.json.example railway.json
-```
+## Usage 💡
 
-## 🚀 Running the Applications
-
-### Streamlit Web App
+1. Run the Streamlit app:
 ```bash
 streamlit run streamlit_app.py
 ```
-The web interface will be available at `http://localhost:8501`
 
-### Telegram Bot
-```bash
-python new_bot.py
-```
+2. Open your browser and navigate to the provided URL
+3. Choose your preferred settings in the sidebar
+4. Enter a video URL or view sample videos
+5. Click process and wait for the magic!
 
-## 💡 Usage
-
-### Web Interface
-1. Open the Streamlit app in your browser
-2. Choose your preferred settings in the sidebar:
-   - Commentary style
-   - AI model
-   - Language
-3. Either upload a video file or provide a video URL
-4. Click "Process" and watch the Telegram-style animations
-5. Download your enhanced video when processing is complete
-
-### Telegram Bot
-1. Start a chat with the bot
-2. Use /start to see available commands
-3. Configure your preferences using /settings
-4. Send a video file or URL to process
-5. Wait for the bot to return your enhanced video
-
-## ⚠️ Limitations
+## Limitations ⚠️
 
 - Maximum video size: 50MB
-- Maximum video duration: 5 minutes
+- Maximum duration: 5 minutes
 - Supported formats: MP4, MOV, AVI
 
-## 🔧 Troubleshooting
+## Contributing 🤝
 
-If you encounter issues:
-- Check your API keys and credentials
-- Ensure your video meets the size and format requirements
-- Check your internet connection
-- Look for error messages in the console output
-- For Railway deployment issues, check the deployment logs
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 📝 License
+## License 📄
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🔗 Share Your App
+## Author ✍️
 
-After deploying to Railway, you can share your app using the Railway-provided URL:
-`https://your-project-name.railway.app`
+**Mani** - [MrEmanAhmad](https://github.com/MrEmanAhmad)
 
-To customize the domain:
-1. Go to your Railway project settings
-2. Navigate to the "Domains" section
-3. Add a custom domain or use Railway's provided domain
+## Acknowledgments 🙏
 
-Remember to secure your API keys and credentials when sharing the app! 
+- OpenAI for GPT models
+- DeepSeek for AI capabilities
+- Google Cloud for voice synthesis
+- Streamlit for the awesome web framework 

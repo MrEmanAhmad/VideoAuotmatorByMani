@@ -9,11 +9,17 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('streamlit_app.log')
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('streamlit_app.log', encoding='utf-8')
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Set stdout and stderr encoding to UTF-8
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8')
 
 # Add the current directory to Python path
 sys.path.append(str(Path(__file__).parent))
@@ -172,107 +178,139 @@ try:
         # Custom CSS with mobile responsiveness and centered content
         st.markdown("""
             <style>
-            /* Center content and add responsive design */
-            .main-content {
-                max-width: 800px;
+            /* Global responsive container */
+            .main {
+                max-width: 1200px;
                 margin: 0 auto;
                 padding: 1rem;
             }
-            
-            .stButton>button {
+
+            /* Responsive text sizing */
+            @media (max-width: 768px) {
+                h1 { font-size: 1.5rem !important; }
+                h2 { font-size: 1.3rem !important; }
+                p, div { font-size: 0.9rem !important; }
+            }
+
+            /* Center all content */
+            .stApp {
+                max-width: 100%;
+                margin: 0 auto;
+            }
+
+            /* Make tabs more mobile-friendly */
+            .stTabs [data-baseweb="tab-list"] {
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .stTabs [data-baseweb="tab"] {
+                height: auto !important;
+                padding: 10px !important;
+                white-space: normal !important;
+                min-width: 120px;
+            }
+
+            /* Responsive video grid */
+            .sample-video-grid {
+                display: grid;
+                gap: 1rem;
                 width: 100%;
-                height: 3em;
-                margin-top: 1em;
+                padding: 1rem;
             }
-            
-            /* Processing animation container */
-            .processing-container {
-                text-align: center;
-                padding: 2rem;
-                margin: 2rem auto;
-                max-width: 90%;
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 1rem;
-                backdrop-filter: blur(10px);
+
+            /* Responsive grid breakpoints */
+            @media (min-width: 1200px) {
+                .sample-video-grid { grid-template-columns: repeat(3, 1fr); }
             }
-            
-            /* Telegram-style animations */
-            .telegram-animation {
-                font-size: 3rem;
-                margin: 1rem 0;
-                animation: pulse 2s infinite;
+            @media (min-width: 768px) and (max-width: 1199px) {
+                .sample-video-grid { grid-template-columns: repeat(2, 1fr); }
             }
-            
-            @keyframes pulse {
-                0% { transform: scale(1); }
-                50% { transform: scale(1.1); }
-                100% { transform: scale(1); }
+            @media (max-width: 767px) {
+                .sample-video-grid { grid-template-columns: 1fr; }
             }
-            
-            /* Video container */
-            .video-container {
-                position: relative;
+
+            /* Video container styling */
+            .sample-video-card {
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 10px;
+                padding: 1rem;
+                width: 100%;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                transition: transform 0.2s;
+            }
+
+            .sample-video-card:hover {
+                transform: translateY(-2px);
+            }
+
+            /* Make all videos responsive */
+            .stVideo {
+                width: 100% !important;
+                height: auto !important;
+            }
+
+            video {
+                width: 100% !important;
+                height: auto !important;
+                max-height: 70vh;
+                object-fit: contain;
+            }
+
+            /* URL input and button styling */
+            .url-input-container {
+                width: 100%;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 1rem;
+            }
+
+            /* Style text inputs */
+            .stTextInput input {
+                width: 100%;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 0.5rem;
+                border-radius: 5px;
+            }
+
+            /* Style buttons */
+            .stButton button {
+                width: auto !important;
+                min-width: 150px;
+                max-width: 300px;
+                margin: 1rem auto !important;
+                padding: 0.5rem 1rem !important;
+                display: block !important;
+                border-radius: 5px;
+            }
+
+            /* Responsive sidebar */
+            @media (max-width: 768px) {
+                .css-1d391kg {
+                    width: 100% !important;
+                }
+            }
+
+            /* Loading and status messages */
+            .stAlert {
+                max-width: 600px;
+                margin: 1rem auto !important;
+            }
+
+            /* Generated video container */
+            .generated-video-container {
                 width: 100%;
                 max-width: 800px;
-                margin: 0 auto;
-                border-radius: 1rem;
-                overflow: hidden;
+                margin: 2rem auto;
+                padding: 1rem;
             }
-            
-            .video-container video {
+
+            .generated-video-container video {
                 width: 100%;
                 height: auto;
-                border-radius: 1rem;
-            }
-            
-            /* Download button styling */
-            .download-btn {
-                background: linear-gradient(45deg, #2196F3, #00BCD4);
-                color: white;
-                padding: 1rem 2rem;
-                border-radius: 2rem;
-                border: none;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                transition: all 0.3s ease;
-                width: 100%;
-                max-width: 300px;
-                margin: 1rem auto;
-                display: block;
-            }
-            
-            .download-btn:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 8px rgba(0,0,0,0.2);
-            }
-            
-            /* Mobile optimization */
-            @media (max-width: 768px) {
-                .main-content {
-                    padding: 0.5rem;
-                }
-                
-                .processing-container {
-                    padding: 1rem;
-                    margin: 1rem auto;
-                }
-                
-                .telegram-animation {
-                    font-size: 2rem;
-                }
-            }
-            
-            /* Status messages */
-            .status-message {
-                text-align: center;
-                padding: 1rem;
-                margin: 1rem 0;
-                border-radius: 0.5rem;
-                background: rgba(255, 255, 255, 0.1);
-            }
-            
-            /* Progress bar */
-            .stProgress > div > div {
-                background-color: #2196F3;
+                max-height: 80vh;
+                border-radius: 10px;
             }
             </style>
         """, unsafe_allow_html=True)
@@ -430,7 +468,7 @@ try:
                 
                 if video_url:
                     logger.info(f"Processing video URL: {video_url}")
-                    status_placeholder.info("📥 Downloading video from URL...")
+
                     await bot.process_video_from_url(update, context, video_url)
                 elif uploaded_file:
                     logger.info(f"Processing uploaded file: {uploaded_file.name}")
@@ -451,43 +489,17 @@ try:
                     delattr(st.session_state, 'processing_start_time')
                 cleanup_memory(force=True)
         
-        # Main content area
-        tab1, tab2 = st.tabs(["📤 Upload Video", "🔗 Video URL"])
-        
-        # Upload Video Tab
-        with tab1:
-            uploaded_file = st.file_uploader(
-                "Choose a video file",
-                type=['mp4', 'mov', 'avi'],
-                help="Maximum file size: 50MB"
-            )
-            
-            if uploaded_file:
-                if uploaded_file.size > init_bot().MAX_VIDEO_SIZE:
-                    st.error("❌ Video is too large. Maximum size is 50MB.")
-                else:
-                    st.video(uploaded_file)
-                    if st.button("Process Video", key="process_upload"):
-                        if not st.session_state.is_processing:
-                            st.session_state.is_processing = True
-                            st.session_state.progress = 0
-                            st.session_state.status = "Starting video processing..."
-                            try:
-                                # Run video processing
-                                asyncio.run(process_video())
-                            except Exception as e:
-                                logger.error(f"Error in process_upload: {str(e)}")
-                                st.error("❌ Failed to process video. Please try again.")
-                                st.session_state.is_processing = False
-                        else:
-                            st.warning("⚠️ Already processing a video. Please wait.")
+        # Main content area with responsive containers
+        tab1, tab2 = st.tabs(["🔗 Video URL", "🎥 Sample Videos"])
         
         # Video URL Tab
-        with tab2:
+        with tab1:
+            st.markdown("<div class='url-input-container'>", unsafe_allow_html=True)
             video_url = st.text_input(
                 "Enter video URL",
                 placeholder="https://example.com/video.mp4",
-                help="Support for YouTube, Vimeo, TikTok, and more"
+                help="Support for YouTube, Vimeo, TikTok, and more",
+                label_visibility="collapsed"
             )
             
             if video_url:
@@ -496,26 +508,36 @@ try:
                         st.error("❌ Please provide a valid URL starting with http:// or https://")
                     else:
                         try:
-                            # Reset processing state if stuck
-                            if st.session_state.is_processing and hasattr(st.session_state, 'processing_start_time'):
-                                if (datetime.now() - st.session_state.processing_start_time).total_seconds() > 300:
-                                    st.session_state.is_processing = False
-                                    logger.warning("Reset stuck processing state")
-                            
                             if not st.session_state.is_processing:
                                 st.session_state.progress = 0
                                 st.session_state.status = "Starting video processing..."
-                                # Run video processing
                                 asyncio.run(process_video())
                             else:
-                                st.warning("⚠️ Already processing a video. Please wait or refresh the page if stuck.")
+                                st.warning("⚠️ Already processing a video. Please wait.")
                         except Exception as e:
                             logger.error(f"Error in process_url: {str(e)}")
                             st.error("❌ Failed to process video URL. Please try again.")
-                            # Reset processing state on error
                             st.session_state.is_processing = False
-                            if hasattr(st.session_state, 'processing_start_time'):
-                                delattr(st.session_state, 'processing_start_time')
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+        # Sample Videos Tab
+        with tab2:
+            st.markdown("<div class='sample-video-grid'>", unsafe_allow_html=True)
+            
+            # Get list of sample videos
+            sample_videos_dir = Path("sample_generated_videos")
+            if sample_videos_dir.exists():
+                sample_videos = list(sample_videos_dir.glob("*.mp4"))
+                
+                # Display each sample video in a card
+                for video_path in sample_videos:
+                    st.markdown("<div class='sample-video-card'>", unsafe_allow_html=True)
+                    st.video(str(video_path))
+                    st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.info("No sample videos available")
+            
+            st.markdown("</div>", unsafe_allow_html=True)
         
         # Add memory monitoring
         if st.sidebar.checkbox("Show Memory Usage"):
@@ -526,12 +548,14 @@ try:
                 cleanup_memory()
                 st.sidebar.success("Memory cleaned up!")
         
-        # Modify the video display section to use st.cache_data
-        @st.cache_data(ttl=60)  # Cache for 60 seconds
+        # Display generated video in a responsive container
+        @st.cache_data(ttl=60)
         def display_video(video_data, caption=None):
+            st.markdown("<div class='generated-video-container'>", unsafe_allow_html=True)
             if caption:
-                st.markdown(f"### {caption}")
+                st.markdown(f"<h3 style='text-align: center;'>{caption}</h3>", unsafe_allow_html=True)
             st.video(video_data)
+            st.markdown("</div>", unsafe_allow_html=True)
             return True
         
         # Help section
