@@ -20,6 +20,11 @@ RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     git \
+    libmagic1 \
+    libpython3-dev \
+    build-essential \
+    python3-dev \
+    pkg-config \
     && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
     && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
     && apt-get update \
@@ -36,19 +41,33 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Create Streamlit config directory and add config
-RUN mkdir -p /home/app_user/.streamlit && \
-    echo '[server]\nenableCORS = false\nenableXsrfProtection = false\nheadless = true\n\n[browser]\ngatherUsageStats = false\n\n[theme]\nprimaryColor = "#2196F3"\nbackgroundColor = "#FFFFFF"\nsecondaryBackgroundColor = "#F0F2F6"\ntextColor = "#262730"\nfont = "sans serif"' > /home/app_user/.streamlit/config.toml
+# Create directories and set permissions
+RUN mkdir -p /home/app_user/.streamlit \
+    /home/app_user/.cache/yt-dlp \
+    /home/app_user/.cache/youtube-dl \
+    credentials \
+    analysis_temp \
+    /home/app_user/.config/google-chrome
+
+# Copy Streamlit config
+COPY .streamlit/config.toml /home/app_user/.streamlit/config.toml
 
 # Copy the entire application
 COPY . .
 
-# Create necessary directories with proper permissions
-RUN mkdir -p credentials analysis_temp && \
-    mkdir -p /home/app_user/.config/google-chrome && \
-    chown -R app_user:app_user /app credentials analysis_temp /home/app_user/.config /home/app_user/.streamlit && \
+# Set proper permissions
+RUN chown -R app_user:app_user /app \
+    /home/app_user/.streamlit \
+    /home/app_user/.cache \
+    credentials \
+    analysis_temp \
+    /home/app_user/.config && \
     chmod -R 755 /app pipeline && \
-    chmod -R 777 credentials analysis_temp /home/app_user/.config /home/app_user/.streamlit
+    chmod -R 777 credentials \
+    analysis_temp \
+    /home/app_user/.config \
+    /home/app_user/.streamlit \
+    /home/app_user/.cache
 
 # Switch to non-root user
 USER app_user
