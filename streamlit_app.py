@@ -40,44 +40,71 @@ try:
     
     # Load configuration
     try:
-        # First check if required environment variables are set directly in Railway
+        # Define required variables
         required_vars = [
             'OPENAI_API_KEY',
             'DEEPSEEK_API_KEY',
             'GOOGLE_APPLICATION_CREDENTIALS_JSON'
         ]
         
-        # Check if all required variables are in environment
-        all_vars_present = all(os.getenv(var) for var in required_vars)
+        # First try to get variables from environment (Railway)
+        env_vars = {var: os.getenv(var) for var in required_vars}
+        missing_vars = [var for var, value in env_vars.items() if not value]
         
-        if not all_vars_present:
-            # If not all variables are present, try loading from railway.json as fallback
+        # Log environment status
+        logger.info("Checking environment variables...")
+        for var in required_vars:
+            if os.getenv(var):
+                logger.info(f"✓ Found {var} in environment")
+            else:
+                logger.warning(f"✗ Missing {var} in environment")
+        
+        # Try to load from railway.json if any variables are missing
+        if missing_vars:
+            logger.info("Some variables missing, checking railway.json...")
             railway_file = Path("railway.json")
             if railway_file.exists():
-                logger.info("Loading configuration from railway.json")
+                logger.info("Found railway.json, loading configuration...")
                 with open(railway_file, 'r') as f:
                     config = json.load(f)
-                for key, value in config.items():
-                    if not os.getenv(key):  # Only set if not already in environment
-                        os.environ[key] = str(value)
+                for var in missing_vars:
+                    if var in config:
+                        os.environ[var] = str(config[var])
+                        logger.info(f"Loaded {var} from railway.json")
             else:
-                logger.warning("No railway.json found, checking if required variables are set in environment")
-                # Check which variables are missing
-                missing_vars = [var for var in required_vars if not os.getenv(var)]
-                if missing_vars:
-                    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+                logger.warning("railway.json not found")
         
-        # Set up Google credentials if provided
+        # Final check for required variables
+        still_missing = [var for var in required_vars if not os.getenv(var)]
+        if still_missing:
+            error_msg = f"Missing required environment variables: {', '.join(still_missing)}"
+            logger.error(error_msg)
+            st.error(f"⚠️ Configuration Error: {error_msg}")
+            st.error("Please ensure all required environment variables are set in Railway or railway.json")
+            st.stop()
+        
+        # Set up Google credentials
         if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
-            creds_dir = Path("credentials")
-            creds_dir.mkdir(exist_ok=True)
-            
-            google_creds_file = creds_dir / "google_credentials.json"
-            with open(google_creds_file, 'w') as f:
-                json.dump(json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"]), f, indent=2)
-            
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
-            logger.info("Google credentials configured successfully")
+            try:
+                creds_dir = Path("credentials")
+                creds_dir.mkdir(exist_ok=True)
+                
+                google_creds_file = creds_dir / "google_credentials.json"
+                creds_json = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+                
+                with open(google_creds_file, 'w') as f:
+                    json.dump(creds_json, f, indent=2)
+                
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
+                logger.info("✓ Google credentials configured successfully")
+            except Exception as e:
+                logger.error(f"Error setting up Google credentials: {e}")
+                st.error("⚠️ Error setting up Google credentials. Please check the credential format.")
+                st.stop()
+
+        # Continue with the rest of the imports and initialization
+        logger.info("✓ Configuration loaded successfully")
+        loading_placeholder.success("✓ Configuration loaded successfully")
         
         # Import required modules
         import tempfile
