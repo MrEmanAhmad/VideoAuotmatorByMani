@@ -13,14 +13,14 @@ ENV PYTHONUNBUFFERED=1 \
 # Create a non-root user
 RUN useradd -m -s /bin/bash app_user
 
-# Install system dependencies and Chrome
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsm6 \
     libxext6 \
     libgl1-mesa-glx \
     wget \
-    gnupg \
+    gnupg2 \
     git \
     libmagic1 \
     libpython3-dev \
@@ -33,19 +33,23 @@ RUN apt-get update && apt-get install -y \
     libxi6 \
     libgconf-2-4 \
     default-jdk \
-    && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    apt-transport-https \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Chrome and ChromeDriver
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
-    && CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d'.' -f1) \
-    && wget -q "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}" -O - | xargs -I{} wget -q "https://chromedriver.storage.googleapis.com/{}/chromedriver_linux64.zip" \
-    && unzip chromedriver_linux64.zip \
-    && mv chromedriver /usr/local/bin/ \
+    && CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1) \
+    && CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}") \
+    && wget -q --continue -P /chromedriver "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip" \
+    && unzip /chromedriver/chromedriver_linux64.zip -d /usr/local/bin/ \
+    && rm /chromedriver/chromedriver_linux64.zip \
     && chmod +x /usr/local/bin/chromedriver \
-    && rm chromedriver_linux64.zip \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /root/.cache/*
+    && rm -rf /var/lib/apt/lists/* /chromedriver
 
 # Set working directory
 WORKDIR /app
@@ -113,8 +117,9 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # Expose the port that will be used by Streamlit
 EXPOSE ${PORT:-8501}
 
-# Command to run Streamlit using PORT environment variable with proper error handling
-CMD streamlit run --server.port=${PORT:-8501} \
+# Start Xvfb and run Streamlit
+CMD Xvfb :99 -screen 0 1280x1024x24 -ac +extension GLX +render -noreset & \
+    streamlit run --server.port=${PORT:-8501} \
     --server.address=0.0.0.0 \
     --server.maxUploadSize=50 \
     --server.enableCORS=false \

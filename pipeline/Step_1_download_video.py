@@ -54,12 +54,34 @@ class VideoDownloader:
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
+            # Set Chrome binary path based on OS
+            if os.name == 'nt':  # Windows
+                chrome_paths = [
+                    os.environ.get('CHROME_BIN'),
+                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                ]
+            else:  # Linux/Mac
+                chrome_paths = [
+                    os.environ.get('CHROME_BIN'),
+                    '/usr/bin/google-chrome',
+                    '/usr/bin/google-chrome-stable'
+                ]
+            
+            # Find the first existing Chrome binary
+            chrome_binary = next((path for path in chrome_paths if path and os.path.exists(path)), None)
+            if chrome_binary:
+                logger.info(f"Found Chrome binary at: {chrome_binary}")
+                chrome_options.binary_location = chrome_binary
+            else:
+                logger.warning("Chrome binary not found in standard locations")
+            
             # Create a temporary file for cookies
             cookie_fd, cookie_path = tempfile.mkstemp(suffix='.txt')
             os.close(cookie_fd)
             
             # Initialize Chrome driver with webdriver_manager
-            service = Service(ChromeDriverManager().install())
+            service = Service(ChromeDriverManager(cache_valid_range=7).install())
             driver = webdriver.Chrome(service=service, options=chrome_options)
             
             try:
