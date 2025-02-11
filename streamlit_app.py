@@ -13,6 +13,25 @@ import tracemalloc
 import psutil
 import logging
 
+# Disable Streamlit's welcome message
+st.set_option('client.showErrorDetails', False)
+st.set_option('server.enableCORS', False)
+st.set_option('server.enableXsrfProtection', False)
+st.set_option('browser.gatherUsageStats', False)
+
+# Set page config first to avoid StreamlitAPIException
+st.set_page_config(
+    page_title="AI Video Commentary Bot",
+    page_icon="🎬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
+)
+
 # Add the current directory to Python path
 import sys
 sys.path.append(str(Path(__file__).parent))
@@ -28,54 +47,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Set page config first to avoid StreamlitAPIException
-st.set_page_config(
-    page_title="AI Video Commentary Bot",
-    page_icon="🎬",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
 # Load railway.json configuration
-railway_file = Path("railway.json")
-if railway_file.exists():
-    try:
-        with open(railway_file, 'r') as f:
-            config = json.load(f)
+try:
+    railway_file = Path("railway.json")
+    if not railway_file.exists():
+        raise FileNotFoundError("railway.json not found")
         
-        # Set up environment variables from railway.json
-        for key, value in config.items():
-            os.environ[key] = value
+    with open(railway_file, 'r') as f:
+        config = json.load(f)
+    
+    # Set up environment variables from railway.json
+    for key, value in config.items():
+        os.environ[key] = value
+    
+    # Set up Google credentials
+    if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in config:
+        creds_dir = Path("credentials")
+        creds_dir.mkdir(exist_ok=True)
         
-        # Set up Google credentials
-        if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in config:
-            # Create credentials directory if it doesn't exist
-            creds_dir = Path("credentials")
-            creds_dir.mkdir(exist_ok=True)
-            
-            # Parse and save Google credentials
-            creds_json = json.loads(config["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
-            google_creds_file = creds_dir / "google_credentials.json"
-            with open(google_creds_file, 'w') as f:
-                json.dump(creds_json, f, indent=2)
-            
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
-    except Exception as e:
-        logger.error(f"Error loading configuration: {e}")
-        st.error("Failed to load configuration. Please check your deployment settings.")
-        st.stop()
-else:
-    logger.error("railway.json not found")
-    st.error("Configuration file (railway.json) not found. Please check your deployment settings.")
+        google_creds_file = creds_dir / "google_credentials.json"
+        with open(google_creds_file, 'w') as f:
+            json.dump(json.loads(config["GOOGLE_APPLICATION_CREDENTIALS_JSON"]), f, indent=2)
+        
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
+        
+except Exception as e:
+    logger.error(f"Configuration error: {e}")
+    st.error("⚠️ Failed to load configuration. Please check deployment settings.")
     st.stop()
 
-# Now import VideoBot after environment is configured
+# Import required modules
 try:
     from new_bot import VideoBot
     from pipeline import Step_1_download_video, Step_7_cleanup
 except Exception as e:
-    logger.error(f"Failed to import required modules: {e}")
-    st.error("Failed to initialize required components. Please check your installation.")
+    logger.error(f"Import error: {e}")
+    st.error("⚠️ Failed to load required components. Please check installation.")
     st.stop()
 
 # Initialize VideoBot with proper caching
@@ -85,9 +92,25 @@ def init_bot():
     try:
         return VideoBot()
     except Exception as e:
-        logger.error(f"Failed to initialize VideoBot: {e}")
-        st.error("Failed to initialize the application. Please check your configuration.")
+        logger.error(f"Bot initialization error: {e}")
+        st.error("⚠️ Failed to initialize the application.")
         st.stop()
+
+# Initialize bot instance early
+try:
+    bot = init_bot()
+except Exception as e:
+    logger.error(f"Failed to create bot instance: {e}")
+    st.error("⚠️ Application initialization failed.")
+    st.stop()
+
+# Initialize session state safely
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = False
+    st.session_state.settings = bot.default_settings.copy()
+    st.session_state.is_processing = False
+    st.session_state.progress = 0
+    st.session_state.status = ""
 
 # Safe cleanup function
 def cleanup_memory(force=False):
@@ -111,23 +134,6 @@ def cleanup_memory(force=False):
             logger.info("Cleanup completed successfully")
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
-
-# Initialize session state safely
-if 'initialized' not in st.session_state:
-    st.session_state.initialized = False
-
-if not st.session_state.initialized:
-    try:
-        st.session_state.settings = init_bot().default_settings.copy()
-        st.session_state.is_processing = False
-        st.session_state.progress = 0
-        st.session_state.status = ""
-        st.session_state.initialized = True
-        logger.info("Session state initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize session state: {e}")
-        st.error("Failed to initialize application state. Please refresh the page.")
-        st.stop()
 
 # Custom CSS with mobile responsiveness and centered content
 st.markdown("""
@@ -345,9 +351,6 @@ with tab2:
                         st.session_state.is_processing = False
                 else:
                     st.warning("⚠️ Already processing a video. Please wait.")
-
-# Initialize bot with caching
-bot = init_bot()
 
 # Add memory monitoring
 if st.sidebar.checkbox("Show Memory Usage"):
