@@ -22,31 +22,71 @@ from datetime import datetime
 # Add the current directory to Python path
 sys.path.append(str(Path(__file__).parent))
 
-# Load railway.json configuration
-railway_file = Path("railway.json")
-if railway_file.exists():
-    with open(railway_file, 'r') as f:
-        config = json.load(f)
-    
-    # Set up environment variables from railway.json
-    for key, value in config.items():
-        os.environ[key] = value
-    
-    # Set up Google credentials
-    if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in config:
-        # Create credentials directory if it doesn't exist
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Load configuration
+required_vars = [
+    'OPENAI_API_KEY',
+    'DEEPSEEK_API_KEY',
+    'GOOGLE_APPLICATION_CREDENTIALS_JSON'
+]
+
+# First try to get variables from environment (Railway)
+env_vars = {var: os.getenv(var) for var in required_vars}
+missing_vars = [var for var, value in env_vars.items() if not value]
+
+# Log environment status
+logger.info("Checking environment variables...")
+for var in required_vars:
+    if os.getenv(var):
+        logger.info(f"✓ Found {var} in environment")
+    else:
+        logger.warning(f"✗ Missing {var} in environment")
+
+# Try to load from railway.json if any variables are missing
+if missing_vars:
+    logger.info("Some variables missing, checking railway.json...")
+    railway_file = Path("railway.json")
+    if railway_file.exists():
+        logger.info("Found railway.json, loading configuration...")
+        with open(railway_file, 'r') as f:
+            config = json.load(f)
+        for var in missing_vars:
+            if var in config:
+                os.environ[var] = str(config[var])
+                logger.info(f"Loaded {var} from railway.json")
+    else:
+        logger.warning("railway.json not found")
+
+# Final check for required variables
+still_missing = [var for var in required_vars if not os.getenv(var)]
+if still_missing:
+    error_msg = f"Missing required environment variables: {', '.join(still_missing)}"
+    logger.error(error_msg)
+    raise ValueError(error_msg)
+
+# Set up Google credentials
+if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
+    try:
         creds_dir = Path("credentials")
         creds_dir.mkdir(exist_ok=True)
         
-        # Parse and save Google credentials
-        creds_json = json.loads(config["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
         google_creds_file = creds_dir / "google_credentials.json"
+        creds_json = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+        
         with open(google_creds_file, 'w') as f:
             json.dump(creds_json, f, indent=2)
         
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(google_creds_file.absolute())
-else:
-    raise ValueError("railway.json not found")
+        logger.info("✓ Google credentials configured successfully")
+    except Exception as e:
+        logger.error(f"Error setting up Google credentials: {e}")
+        raise
 
 # Import pipeline modules
 from pipeline import (
@@ -57,13 +97,6 @@ from pipeline import (
     Step_5_generate_audio,
     Step_6_video_generation
 )
-
-# Setup logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
 
 # Constants
 MAX_VIDEO_SIZE = 50 * 1024 * 1024  # 50MB
