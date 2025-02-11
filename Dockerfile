@@ -28,24 +28,29 @@ ENV DISPLAY=:99
 # Set working directory
 WORKDIR /app
 
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
 # Copy the entire application
 COPY . .
-
-# Install Python dependencies with HTTP/2 support
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir "httpx[http2]" "python-telegram-bot[http2]"
-
-# Ensure proper package structure
-RUN python -m pip install -e .
 
 # Create necessary directories and set permissions
 RUN mkdir -p credentials && \
     mkdir -p analysis_temp && \
     mkdir -p /root/.config/google-chrome && \
     chmod -R 777 credentials analysis_temp /root/.config/google-chrome && \
-    chmod -R 755 pipeline && \
-    # Verify package installation
-    python -c "from pipeline.Step_4_generate_commentary import CommentaryStyle; print('Package verified successfully')"
+    chmod -R 755 pipeline
 
-# Command to run the bot
-CMD ["python", "-m", "bot"] 
+# Expose Streamlit port
+EXPOSE 8501
+
+# Set Streamlit specific environment variables
+ENV LC_ALL=C.UTF-8 \
+    LANG=C.UTF-8
+
+# Command to run Streamlit
+CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"] 
