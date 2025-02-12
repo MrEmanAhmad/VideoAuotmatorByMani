@@ -25,24 +25,18 @@ class PromptTemplate:
 class PromptManager:
     """Manager for handling prompts and LLM interactions."""
     
-    DEEPSEEK_API_ENDPOINT = "https://api.deepseek.com/v1/chat/completions"
-    
     def __init__(self, provider: LLMProvider = LLMProvider.OPENAI):
         """Initialize the prompt manager with a specific provider."""
         self.provider = provider
         self.client = None
-        self.api_key = None
-        self.api_url = None
         self._setup_client()
         
     def _setup_client(self):
         """Setup the appropriate client based on provider."""
         try:
             if self.provider == LLMProvider.OPENAI:
-                # Initialize OpenAI client with explicit API key like in test.py
                 self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
             elif self.provider == LLMProvider.DEEPSEEK:
-                # Initialize DeepSeek client like in test.py
                 self.client = OpenAI(
                     api_key=os.getenv('DEEPSEEK_API_KEY'),
                     base_url="https://api.deepseek.com/v1"
@@ -50,97 +44,107 @@ class PromptManager:
         except Exception as e:
             logger.error(f"Error setting up {self.provider.value} client: {str(e)}")
             raise
-    
-    def switch_provider(self, provider: LLMProvider):
-        """Switch between LLM providers."""
-        self.provider = provider
-        self._setup_client()
 
-    def _call_openai(self, prompt: str, params: Dict[str, Any]) -> str:
-        """Call OpenAI API with proper error handling."""
-        try:
-            if not self.client:
-                raise ValueError("OpenAI client not initialized")
-
-            # For vision tasks
-            if params.get("is_vision", False):
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": params.get("image_url", ""),
-                                },
-                            },
-                        ],
-                    }
-                ]
-            else:
-                # For text tasks
-                messages = [
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt}
-                ]
-            
-            response = self.client.chat.completions.create(
-                model=params.get("model", "gpt-4o-mini"),  # Use same model as test.py
-                messages=messages,
-                max_tokens=params.get("max_tokens", 300),
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"OpenAI API error: {str(e)}")
-            raise
-
-    def _call_deepseek(self, prompt: str, params: Dict[str, Any]) -> str:
-        """Call Deepseek API with proper error handling."""
-        try:
-            if not self.client:
-                raise ValueError("DeepSeek client not initialized")
-
-            response = self.client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=params.get("max_tokens", 300)
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"DeepSeek API error: {str(e)}")
-            raise
-
-    def generate_response(self, prompt_template: PromptTemplate, **kwargs) -> str:
+    def generate_response(self, messages: list, model: str = "gpt-4o-mini", **kwargs) -> str:
         """Generate response using the selected provider."""
         try:
-            # Format the prompt template with provided kwargs
-            prompt = prompt_template.template.format(**kwargs)
-            
-            # Get provider-specific parameters
-            params = prompt_template.provider_specific_params.get(
-                self.provider.value,
-                {}
+            if not self.client:
+                raise ValueError(f"{self.provider.value} client not initialized")
+
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                **kwargs
             )
             
-            # Call appropriate provider
-            if self.provider == LLMProvider.OPENAI:
-                return self._call_openai(prompt, params)
-            elif self.provider == LLMProvider.DEEPSEEK:
-                return self._call_deepseek(prompt, params)
-            else:
-                raise ValueError(f"Unsupported provider: {self.provider}")
-                
+            return response.choices[0].message.content
+            
         except Exception as e:
             logger.error(f"Error generating response: {str(e)}")
             raise
+
+# Commentary style templates
+COMMENTARY_STYLES = {
+    "news": {
+        "system_prompt": """You are a professional news commentator. Create clear, objective commentary that:
+- Uses formal journalistic language
+- Presents information objectively
+- Follows news reporting structure
+- Maintains credibility and authority
+- Emphasizes key facts and developments""",
+        "example": "Breaking news: In a remarkable development..."
+    },
+    "funny": {
+        "system_prompt": """You are an entertaining commentator. Create humorous commentary that:
+- Uses witty observations and jokes
+- Maintains light and playful tone
+- Includes appropriate humor
+- Emphasizes amusing moments
+- Keeps engagement through humor""",
+        "example": "Oh my goodness, you won't believe what happens next..."
+    },
+    "nature": {
+        "system_prompt": """You are a nature documentary narrator. Create descriptive commentary that:
+- Uses vivid, descriptive language
+- Conveys wonder and appreciation
+- Includes scientific observations
+- Maintains a sense of discovery
+- Balances education with entertainment""",
+        "example": "Watch as this magnificent creature..."
+    },
+    "infographic": {
+        "system_prompt": """You are an educational content expert. Create informative commentary that:
+- Explains complex information simply
+- Highlights key data points
+- Uses clear, precise language
+- Maintains educational focus
+- Guides through visual information""",
+        "example": "Let's break down these important numbers..."
+    },
+    "urdu": {
+        "system_prompt": """You are a culturally-aware Urdu commentator. Create commentary that:
+- Uses natural, flowing Urdu expressions
+- Adapts tone to content formality
+- Incorporates poetic elements when suitable
+- Maintains cultural sensitivity
+- Balances formal and casual language""",
+        "example": "دیکھیے کیسے یہ خوبصورت منظر..."
+    }
+}
+
+# Speech patterns for different styles
+SPEECH_PATTERNS = {
+    "news": {
+        "fillers": ["Breaking news...", "In this development...", "We're reporting...", "Sources confirm..."],
+        "transitions": ["Furthermore...", "In addition...", "Moving to our next point..."],
+        "emphasis": ["critically", "significantly", "notably", "exclusively"],
+        "pause_frequency": 0.3
+    },
+    "funny": {
+        "fillers": ["Get this...", "You'll love this...", "Here's the funny part...", "Wait for it..."],
+        "transitions": ["But that's not all...", "It gets better...", "Here's the best part..."],
+        "emphasis": ["hilarious", "absolutely", "totally", "literally"],
+        "pause_frequency": 0.2
+    },
+    "nature": {
+        "fillers": ["Observe...", "Remarkably...", "Fascinatingly...", "In nature..."],
+        "transitions": ["Meanwhile...", "As we watch...", "In this habitat..."],
+        "emphasis": ["extraordinary", "magnificent", "remarkable", "fascinating"],
+        "pause_frequency": 0.4
+    },
+    "infographic": {
+        "fillers": ["Let's analyze...", "Notice here...", "This data shows...", "Looking at these numbers..."],
+        "transitions": ["Next we see...", "This leads to...", "The data indicates..."],
+        "emphasis": ["significantly", "precisely", "clearly", "effectively"],
+        "pause_frequency": 0.5
+    },
+    "urdu": {
+        "fillers": ["دیکھیں...", "ارے واہ...", "سنیں تو...", "کیا بات ہے..."],
+        "transitions": ["اور پھر...", "اس کے بعد...", "سب سے اچھی بات..."],
+        "emphasis": ["بالکل", "یقیناً", "واقعی", "بےحد"],
+        "pause_frequency": 0.3
+    }
+}
 
 # Define prompt templates
 COMMENTARY_PROMPTS = {

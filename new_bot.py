@@ -171,7 +171,7 @@ class VideoBot:
         
         # Default settings
         self.default_settings = {
-            'style': 'documentary',
+            'style': 'news',
             'llm': 'openai',
             'language': 'en',
             'notifications': True,
@@ -180,36 +180,39 @@ class VideoBot:
         
         # Available styles
         self.styles = {
-            'documentary': {
-                'name': '🎥 Documentary',
-                'description': 'Professional & informative narration',
-                'icon': '🎥'
+            'news': {
+                'name': '📰 News',
+                'description': 'Professional & objective reporting',
+                'icon': '📰'
             },
-            'energetic': {
-                'name': '🔥 Energetic',
-                'description': 'Dynamic & enthusiastic commentary',
-                'icon': '🔥'
+            'funny': {
+                'name': '😄 Funny',
+                'description': 'Entertaining & humorous commentary',
+                'icon': '😄'
             },
-            'analytical': {
-                'name': '🔬 Analytical',
-                'description': 'Technical & detailed analysis',
-                'icon': '🔬'
+            'nature': {
+                'name': '🌿 Nature',
+                'description': 'Documentary-style narration',
+                'icon': '🌿'
             },
-            'storyteller': {
-                'name': '📖 Storyteller',
-                'description': 'Narrative & emotional storytelling',
-                'icon': '📖'
+            'infographic': {
+                'name': '📊 Infographic',
+                'description': 'Educational & informative',
+                'icon': '📊'
             }
         }
         
-        # Available languages
+        # Available languages with their features
         self.languages = {
             'en': {
                 'name': 'English',
-                'icon': '🇬🇧'
+                'description': 'Default language for all styles',
+                'icon': '🇬🇧',
+                'requires_openai': False
             },
             'ur': {
                 'name': 'Urdu',
+                'description': 'Urdu language support for all styles',
                 'icon': '🇵🇰',
                 'requires_openai': True
             }

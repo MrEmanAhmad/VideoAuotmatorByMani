@@ -35,6 +35,7 @@ class VideoGenerator:
             api_secret=api_secret
         )
         self.uploaded_resources = []
+        self.uploaded_logos = {}  # Cache for logo public_ids
         self._setup_cloudinary_config()
         
     def _setup_cloudinary_config(self):
@@ -107,17 +108,58 @@ class VideoGenerator:
             logger.error(f"Error uploading media: {str(e)}")
             return None
             
+    async def upload_logo(self, logo_path: Path, style_name: str) -> Optional[str]:
+        """Upload logo and cache its public_id."""
+        try:
+            # Check if we already have this logo uploaded
+            style_key = style_name.lower()
+            if style_key in self.uploaded_logos:
+                logger.info(f"Using cached logo for style {style_name}")
+                return self.uploaded_logos[style_key]
+
+            logger.info(f"Uploading new logo for style {style_name}: {logo_path}")
+            
+            # Upload logo with specific settings
+            logo_response = cloudinary.uploader.upload(
+                str(logo_path),
+                resource_type="image",
+                public_id=f"logo_{style_key}",
+                overwrite=True,
+                unique_filename=False,
+                use_filename=True,
+                format="png",
+                transformation=[
+                    {"fetch_format": "auto"},
+                    {"quality": "auto:best"}
+                ]
+            )
+            
+            if logo_response and 'public_id' in logo_response:
+                # Cache the logo public_id
+                self.uploaded_logos[style_key] = logo_response['public_id']
+                logger.info(f"Logo uploaded successfully for {style_name}: {logo_response['public_id']}")
+                return logo_response['public_id']
+            else:
+                logger.error(f"Logo upload failed: {logo_response}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error uploading logo: {str(e)}")
+            return None
+            
     async def cleanup_resources(self):
-        """Clean up uploaded resources from Cloudinary."""
+        """Clean up temporary resources but preserve logos."""
         for resource_id in self.uploaded_resources:
             try:
-                cloudinary.uploader.destroy(resource_id)
-                logger.info(f"Cleaned up resource: {resource_id}")
+                # Don't cleanup logo resources
+                if not any(resource_id == logo_id for logo_id in self.uploaded_logos.values()):
+                    cloudinary.uploader.destroy(resource_id)
+                    logger.info(f"Cleaned up resource: {resource_id}")
             except Exception as e:
                 logger.warning(f"Error cleaning up resource {resource_id}: {str(e)}")
         self.uploaded_resources = []
             
-    async def generate_video(self, video_id: str, audio_id: str, output_path: Path) -> Optional[Path]:
+    async def generate_video(self, video_id: str, audio_id: str, output_path: Path, style_name: str = None) -> Optional[Path]:
         """
         Generate final video with optimized processing.
         
@@ -125,6 +167,7 @@ class VideoGenerator:
             video_id: Public ID of uploaded video
             audio_id: Public ID of uploaded audio
             output_path: Path to save the final video
+            style_name: Name of the commentary style used
             
         Returns:
             Path to generated video if successful, None otherwise
@@ -136,6 +179,9 @@ class VideoGenerator:
             details = cloudinary.api.resource(video_id, resource_type='video')
             width = details.get('width', 0)
             height = details.get('height', 0)
+            
+            logger.info(f"Processing video with style: {style_name}")
+            logger.info(f"Video dimensions: {width}x{height}")
             
             # Calculate aspect ratio
             aspect_ratio = width / height if height else 0
@@ -176,6 +222,109 @@ class VideoGenerator:
                 }
             ])
             
+            # Add style-specific logo if available
+            if style_name:
+                try:
+                    # Look for logo in style-specific directory
+                    logo_dir = Path(__file__).parent.parent / 'framesAndLogo' / style_name.capitalize()
+                    logger.info(f"Looking for logo in directory: {logo_dir}")
+                    
+                    if not logo_dir.exists():
+                        logger.warning(f"Logo directory does not exist: {logo_dir}")
+                        raise FileNotFoundError(f"Logo directory not found: {logo_dir}")
+                    
+                    # Search for logo files with multiple patterns
+                    logo_patterns = [
+                        f"{style_name.lower()}logo.*",  # e.g., naturelogo.png
+                        "logo.*",                       # e.g., logo.png
+                        "*.png"                         # any png file
+                    ]
+                    
+                    logo_path = None
+                    for pattern in logo_patterns:
+                        matches = list(logo_dir.glob(pattern))
+                        if matches:
+                            logo_path = matches[0]
+                            logger.info(f"Found logo using pattern '{pattern}': {logo_path}")
+                            break
+                    
+                    if logo_path and logo_path.exists():
+                        # Upload or get cached logo
+                        logo_public_id = await self.upload_logo(logo_path, style_name)
+                        
+                        if logo_public_id:
+                            # Configure logo settings based on style
+                            logo_settings = {
+                                'nature': {
+                                    'width': 120,
+                                    'opacity': 85,
+                                    'gravity': 'south_east',
+                                    'x': 20,
+                                    'y': 20,
+                                    'effect': 'brightness:20'  # Slightly brighten logo
+                                },
+                                'news': {
+                                    'width': 100,
+                                    'opacity': 90,
+                                    'gravity': 'north_east',
+                                    'x': 15,
+                                    'y': 15
+                                },
+                                'funny': {
+                                    'width': 110,
+                                    'opacity': 80,
+                                    'gravity': 'south_west',
+                                    'x': 20,
+                                    'y': 20
+                                },
+                                'infographic': {
+                                    'width': 130,
+                                    'opacity': 95,
+                                    'gravity': 'north_west',
+                                    'x': 15,
+                                    'y': 15
+                                }
+                            }
+                            
+                            # Get style-specific settings or use defaults
+                            settings = logo_settings.get(style_name.lower(), {
+                                'width': 100,
+                                'opacity': 80,
+                                'gravity': 'south_east',
+                                'x': 20,
+                                'y': 20
+                            })
+                            
+                            # Add logo overlay transformation
+                            logo_transform = {
+                                'overlay': logo_public_id,  # Use cached logo public_id
+                                'width': settings['width'],
+                                'opacity': settings['opacity'],
+                                'gravity': settings['gravity'],
+                                'x': settings['x'],
+                                'y': settings['y']
+                            }
+                            
+                            # Add optional effect if present
+                            if 'effect' in settings:
+                                logo_transform['effect'] = settings['effect']
+                            
+                            transformation.extend([
+                                logo_transform,
+                                {'flags': 'layer_apply'}
+                            ])
+                            
+                            logger.info(f"Added {style_name} logo transformation: {logo_transform}")
+                        else:
+                            logger.error("Failed to get logo public_id")
+                    else:
+                        logger.warning(f"No logo files found in {logo_dir} using patterns: {logo_patterns}")
+                except Exception as e:
+                    logger.error(f"Error adding {style_name} logo: {str(e)}", exc_info=True)
+            
+            # Log final transformation chain
+            logger.info(f"Final transformation chain: {transformation}")
+            
             # Generate optimized video URL
             video_url = video.build_url(
                 transformation=transformation,
@@ -183,6 +332,8 @@ class VideoGenerator:
                 format='mp4',
                 secure=True
             )
+            
+            logger.info(f"Generated video URL: {video_url}")
             
             # Download with streaming and chunking
             async with aiohttp.ClientSession() as session:
@@ -195,11 +346,11 @@ class VideoGenerator:
                         logger.info(f"Video generated successfully: {output_path}")
                         return output_path
                     else:
-                        logger.error(f"Error downloading video: {response.status}")
+                        logger.error(f"Error downloading video. Status: {response.status}, URL: {video_url}")
                         return None
                 
         except Exception as e:
-            logger.error(f"Error generating video: {str(e)}")
+            logger.error(f"Error generating video: {str(e)}", exc_info=True)
             return None
         finally:
             await self.cleanup_resources()
@@ -248,7 +399,8 @@ async def execute_step(
         result = await generator.generate_video(
             video_response['public_id'],
             audio_response['public_id'],
-            output_file
+            output_file,
+            style_name
         )
         
         return result

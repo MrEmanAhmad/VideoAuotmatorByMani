@@ -209,7 +209,7 @@ def execute_step(
     output_dir: Path,
     min_scene_change: float = 30.0,
     min_motion_threshold: float = 2.0,
-    max_frames: int = 4  # Reduced from default
+    max_frames: int = 12  # Increased from 4 to 12
 ) -> Tuple[List[Path], List[Path], List[Tuple[Path, float]], float, dict]:
     """
     Execute frame extraction step.
@@ -258,7 +258,7 @@ def execute_step(
         min_scene_change=min_scene_change,
         min_motion_threshold=min_motion_threshold,
         max_frames=max_frames,
-        frame_interval=5  # Sample every 5 frames instead of every frame
+        frame_interval=3  # Reduced from 5 to 3 to sample more frequently
     )
     
     scene_changes = frame_extractor.get_scene_changes()

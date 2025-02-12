@@ -291,31 +291,22 @@ try:
                 .sample-video-grid { grid-template-columns: 1fr; }
             }
 
-            /* Video container styling */
-            .sample-video-card {
-                background: rgba(255, 255, 255, 0.05);
-                border-radius: 10px;
-                padding: 1rem;
-                width: 100%;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                transition: transform 0.2s;
-            }
-
-            .sample-video-card:hover {
-                transform: translateY(-2px);
-            }
-
-            /* Make all videos responsive */
+            /* Make all videos responsive and reel-sized */
             .stVideo {
                 width: 100% !important;
                 height: auto !important;
+                max-width: 400px !important;
+                margin: 0 auto !important;
             }
 
             video {
                 width: 100% !important;
                 height: auto !important;
-                max-height: 70vh;
-                object-fit: contain;
+                max-height: 80vh;
+                aspect-ratio: 9/16 !important;
+                object-fit: cover !important;
+                border-radius: 10px;
+                background: #000;
             }
 
             /* URL input and button styling */
@@ -359,19 +350,57 @@ try:
                 margin: 1rem auto !important;
             }
 
+            /* Center download button and style it */
+            .download-button-container {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                width: 100%;
+                margin: 1rem auto;
+                padding: 0.5rem;
+            }
+
+            .stDownloadButton {
+                display: flex !important;
+                justify-content: center !important;
+                margin: 1rem auto !important;
+            }
+
+            .stDownloadButton > button {
+                background-color: #FF4B4B !important;
+                color: white !important;
+                padding: 0.5rem 2rem !important;
+                border-radius: 25px !important;
+                font-weight: 600 !important;
+                transition: all 0.3s ease !important;
+                border: none !important;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+            }
+
+            .stDownloadButton > button:hover {
+                background-color: #FF3333 !important;
+                transform: translateY(-2px) !important;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+            }
+
+            /* Video card styling */
+            .sample-video-card {
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 10px;
+                padding: 1rem;
+                width: 100%;
+                max-width: 400px;
+                margin: 0 auto;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                transition: transform 0.2s;
+            }
+
             /* Generated video container */
             .generated-video-container {
                 width: 100%;
-                max-width: 800px;
+                max-width: 400px;
                 margin: 2rem auto;
                 padding: 1rem;
-            }
-
-            .generated-video-container video {
-                width: 100%;
-                height: auto;
-                max-height: 80vh;
-                border-radius: 10px;
             }
 
             /* Center all content and animations */
@@ -437,38 +466,54 @@ try:
         with st.sidebar:
             st.header("⚙️ Settings")
             
+            # AI Model selection first
+            st.subheader("AI Model")
+            llm = st.selectbox(
+                "Choose AI model",
+                options=["openai", "deepseek"],
+                format_func=lambda x: "🧠 OpenAI GPT-4" if x == "openai" else "🤖 Deepseek",
+                key="llm"
+            )
+            
+            # Language selection with model compatibility check
+            st.subheader("Language")
+            available_languages = ["en", "ur"] if llm == "openai" else ["en"]
+            language = st.selectbox(
+                "Choose language",
+                options=available_languages,
+                format_func=lambda x: {
+                    "en": "🇬🇧 English - Default language",
+                    "ur": "🇵🇰 Urdu - اردو"
+                }[x],
+                key="language"
+            )
+            
+            # Add warning if trying to use Urdu with Deepseek
+            if llm == "deepseek" and language == "ur":
+                st.warning("⚠️ Urdu language requires OpenAI GPT-4")
+            
             # Style selection
             st.subheader("Commentary Style")
             style = st.selectbox(
                 "Choose your style",
-                options=list(init_bot().styles.keys()),
-                format_func=lambda x: f"{init_bot().styles[x]['icon']} {init_bot().styles[x]['name']}",
+                options=["news", "funny", "nature", "infographic"],
+                format_func=lambda x: {
+                    "news": "📰 News - Professional reporting",
+                    "funny": "😄 Funny - Humorous commentary",
+                    "nature": "🌿 Nature - Documentary style",
+                    "infographic": "📊 Infographic - Educational"
+                }[x],
                 key="style"
             )
-            st.caption(init_bot().styles[style]['description'])
             
-            # AI Model selection
-            st.subheader("AI Model")
-            llm = st.selectbox(
-                "Choose AI model",
-                options=list(init_bot().llm_providers.keys()),
-                format_func=lambda x: f"{init_bot().llm_providers[x]['icon']} {init_bot().llm_providers[x]['name']}",
-                key="llm"
-            )
-            st.caption(init_bot().llm_providers[llm]['description'])
-            
-            # Language selection
-            st.subheader("Language")
-            available_languages = {
-                code: info for code, info in init_bot().languages.items()
-                if not info.get('requires_openai') or llm == 'openai'
+            # Add style description
+            style_descriptions = {
+                "news": "Clear, objective reporting with professional tone",
+                "funny": "Light-hearted, entertaining commentary with humor",
+                "nature": "Descriptive narration with scientific insights",
+                "infographic": "Educational content with clear explanations"
             }
-            language = st.selectbox(
-                "Choose language",
-                options=list(available_languages.keys()),
-                format_func=lambda x: f"{init_bot().languages[x]['icon']} {init_bot().languages[x]['name']}",
-                key="language"
-            )
+            st.caption(style_descriptions[style])
             
             # Update settings in session state and bot's user settings
             user_id = 0  # Default user ID for Streamlit interface
@@ -508,17 +553,36 @@ try:
                 try:
                     if hasattr(video, 'read'):
                         video_data = video.read()
+                        self.output_filename = getattr(video, 'name', None)
                     elif isinstance(video, str) and os.path.exists(video):
-                        with open(video, "rb") as f:
+                        self.output_filename = video
+                        with open(video, 'rb') as f:
                             video_data = f.read()
                     else:
                         logger.error("Invalid video format")
                         st.error("Invalid video format")
                         return self
                     
-                    self.video_placeholder.video(video_data)
+                    # Store video data in session state
+                    st.session_state.processed_video = video_data
+                    
+                    # Display video with download button
+                    self.video_placeholder.markdown("<div class='generated-video-container'>", unsafe_allow_html=True)
                     if caption:
-                        st.markdown(f"### {caption}")
+                        self.video_placeholder.markdown(f"### {caption}")
+                    self.video_placeholder.video(video_data)
+                    
+                    # Add download button with unique key
+                    self.video_placeholder.download_button(
+                        label="⬇️ Download Enhanced Video",
+                        data=video_data,
+                        file_name="enhanced_video.mp4",
+                        mime="video/mp4",
+                        help="Click to download the enhanced video with AI commentary",
+                        key="download_button_reply"
+                    )
+                    
+                    self.video_placeholder.markdown("</div>", unsafe_allow_html=True)
                     return self
                     
                 except Exception as e:
@@ -573,13 +637,15 @@ try:
                 update = StreamlitUpdate()
                 context = StreamlitContext()
                 
-                # Show processing status
+                # Create placeholders for status and video
                 status_placeholder = st.empty()
+                video_container = st.empty()
+                
+                # Show processing status
                 status_placeholder.info("🎬 Starting video processing...")
                 
                 if video_url:
                     logger.info(f"Processing video URL: {video_url}")
-
                     await bot.process_video_from_url(update, context, video_url)
                 elif uploaded_file:
                     logger.info(f"Processing uploaded file: {uploaded_file.name}")
@@ -588,18 +654,23 @@ try:
                         tmp.write(uploaded_file.getbuffer())
                         await bot.process_video_file(update, context, tmp.name, update.message)
                 
-                status_placeholder.success("✅ Processing complete!")
+                # Check if video was processed successfully
+                if st.session_state.get('processed_video'):
+                    status_placeholder.success("✅ Processing complete!")
+                else:
+                    logger.error("No video data found after processing")
+                    status_placeholder.error("❌ Failed to generate video")
                 
             except Exception as e:
                 logger.error(f"Error processing video: {str(e)}")
-                st.error(f"❌ Error processing video: {str(e)}")
+                status_placeholder.error(f"❌ Error processing video: {str(e)}")
             finally:
                 # Clear processing state
                 st.session_state.is_processing = False
                 if hasattr(st.session_state, 'processing_start_time'):
                     delattr(st.session_state, 'processing_start_time')
                 cleanup_memory(force=True)
-        
+
         # Main content area with responsive containers
         tab1, tab2 = st.tabs(["🔗 Video URL", "🎥 Sample Videos"])
         
@@ -659,15 +730,20 @@ try:
                 cleanup_memory()
                 st.sidebar.success("Memory cleaned up!")
         
-        # Display generated video in a responsive container
-        @st.cache_data(ttl=60)
-        def display_video(video_data, caption=None):
+        # Add this section after the tabs to ensure video persists
+        if st.session_state.get('processed_video'):
             st.markdown("<div class='generated-video-container'>", unsafe_allow_html=True)
-            if caption:
-                st.markdown(f"<h3 style='text-align: center;'>{caption}</h3>", unsafe_allow_html=True)
-            st.video(video_data)
-            st.markdown("</div>", unsafe_allow_html=True)
-            return True
+            st.video(st.session_state.processed_video)
+            st.markdown("<div class='download-button-container'>", unsafe_allow_html=True)
+            st.download_button(
+                label="⬇️ Download Enhanced Video",
+                data=st.session_state.processed_video,
+                file_name="enhanced_video.mp4",
+                mime="video/mp4",
+                help="Click to download the enhanced video with AI commentary",
+                key="download_button_persist"
+            )
+            st.markdown("</div></div>", unsafe_allow_html=True)
         
         # Help section
         with st.expander("ℹ️ Help & Information"):
