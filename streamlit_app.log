@@ -13572,3 +13572,10 @@ STRICT REQUIREMENTS:
 2025-02-12 18:03:21,440 - new_bot - INFO - ✓ Found GOOGLE_APPLICATION_CREDENTIALS_JSON in environment
 2025-02-12 18:03:21,441 - new_bot - INFO - Attempting to parse Google credentials...
 2025-02-12 18:03:21,442 - new_bot - INFO - ✓ Google credentials configured successfully
+2025-02-12 18:07:39,291 - __main__ - INFO - Checking environment variables...
+2025-02-12 18:07:39,291 - __main__ - INFO - ✓ Found OPENAI_API_KEY in environment
+2025-02-12 18:07:39,291 - __main__ - INFO - ✓ Found DEEPSEEK_API_KEY in environment
+2025-02-12 18:07:39,303 - __main__ - INFO - ✓ Found GOOGLE_APPLICATION_CREDENTIALS_JSON in environment
+2025-02-12 18:07:39,303 - __main__ - INFO - Attempting to parse Google credentials...
+2025-02-12 18:07:39,304 - __main__ - INFO - ✓ Google credentials configured successfully
+2025-02-12 18:07:39,306 - __main__ - INFO - ✓ Configuration loaded successfully

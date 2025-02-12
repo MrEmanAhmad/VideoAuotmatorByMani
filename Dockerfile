@@ -39,8 +39,20 @@ RUN apt-get update && \
     apt-transport-https \
     ca-certificates \
     chromium \
-    chromium-driver && \
-    apt-get clean && \
+    chromium-driver \
+    # Additional dependencies for video processing
+    libavcodec-extra \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libxvidcore-dev \
+    libx264-dev \
+    libatlas-base-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    # Cleanup
+    && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Set Chrome and ChromeDriver paths
@@ -53,20 +65,28 @@ WORKDIR /app
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install Python dependencies with optimizations
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    rm -rf /root/.cache/pip/*
+    # Clean up pip cache
+    rm -rf /root/.cache/pip/* && \
+    # Pre-compile Python files
+    python -m compileall /app
 
-# Create directories and set permissions
-RUN mkdir -p /home/app_user/.streamlit \
+# Create necessary directories with proper structure
+RUN mkdir -p \
+    /home/app_user/.streamlit \
     /home/app_user/.cache/yt-dlp \
     /home/app_user/.cache/youtube-dl \
     /home/app_user/.cache/selenium \
-    credentials \
-    analysis_temp \
-    sample_generated_videos \
-    /home/app_user/.config/chromium
+    /home/app_user/.config/chromium \
+    /app/credentials \
+    /app/analysis_temp \
+    /app/sample_generated_videos \
+    /app/framesAndLogo/Nature \
+    /app/framesAndLogo/News \
+    /app/framesAndLogo/Funny \
+    /app/framesAndLogo/Infographic
 
 # Copy Streamlit config
 COPY .streamlit/config.toml /home/app_user/.streamlit/config.toml
@@ -75,17 +95,17 @@ COPY .streamlit/config.toml /home/app_user/.streamlit/config.toml
 COPY . .
 
 # Set proper permissions
-RUN chown -R app_user:app_user /app \
+RUN chown -R app_user:app_user \
+    /app \
     /home/app_user/.streamlit \
     /home/app_user/.cache \
     /home/app_user/.config \
-    credentials \
-    analysis_temp \
-    sample_generated_videos \
-    && chmod -R 755 /app pipeline && \
-    chmod -R 777 credentials \
-    analysis_temp \
-    sample_generated_videos \
+    && chmod -R 755 /app pipeline \
+    && chmod -R 777 \
+    /app/credentials \
+    /app/analysis_temp \
+    /app/sample_generated_videos \
+    /app/framesAndLogo \
     /home/app_user/.config \
     /home/app_user/.streamlit \
     /home/app_user/.cache
@@ -93,15 +113,18 @@ RUN chown -R app_user:app_user /app \
 # Switch to non-root user
 USER app_user
 
-# Set Chrome and Selenium configuration for non-root user
+# Set environment variables for the application
 ENV HOME=/home/app_user \
     DISPLAY=:99 \
     PYTHONPATH=${PYTHONPATH}:/app \
-    SELENIUM_CACHE_PATH=/home/app_user/.cache/selenium
-
-# Set Streamlit specific environment variables
-ENV LC_ALL=C.UTF-8 \
-    LANG=C.UTF-8
+    SELENIUM_CACHE_PATH=/home/app_user/.cache/selenium \
+    LC_ALL=C.UTF-8 \
+    LANG=C.UTF-8 \
+    # OpenCV optimizations
+    OPENCV_FFMPEG_CAPTURE_OPTIONS="video_codec;h264_cuvid" \
+    OPENCV_VIDEOIO_PRIORITY_BACKEND=2 \
+    # FFmpeg optimizations
+    FFREPORT=file=/app/analysis_temp/ffmpeg-%p-%t.log
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
@@ -110,11 +133,15 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # Expose the port that will be used by Streamlit
 EXPOSE ${PORT:-8501}
 
-# Start Xvfb and run Streamlit
+# Start Xvfb and run Streamlit with optimized settings
 CMD Xvfb :99 -screen 0 1280x1024x24 -ac +extension GLX +render -noreset & \
-    streamlit run --server.port=${PORT:-8501} \
+    streamlit run \
+    --server.port=${PORT:-8501} \
     --server.address=0.0.0.0 \
     --server.maxUploadSize=50 \
     --server.enableCORS=false \
     --server.enableXsrfProtection=false \
+    --server.maxMessageSize=200 \
+    --browser.gatherUsageStats=false \
+    --theme.base=dark \
     streamlit_app.py 
