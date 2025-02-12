@@ -13,17 +13,19 @@ ENV PYTHONUNBUFFERED=1 \
 # Create a non-root user
 RUN useradd -m -s /bin/bash app_user
 
-# Add additional repositories and install system dependencies
+# Add Chrome repository and install system dependencies
 RUN apt-get update && \
-    apt-get install -y software-properties-common && \
+    apt-get install -y wget gnupg2 && \
+    wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
+    google-chrome-stable \
+    chromium-driver \
     ffmpeg \
     libsm6 \
     libxext6 \
     libgl1-mesa-glx \
-    wget \
-    gnupg2 \
     git \
     libmagic1 \
     libpython3-dev \
@@ -38,9 +40,7 @@ RUN apt-get update && \
     default-jdk \
     apt-transport-https \
     ca-certificates \
-    chromium \
-    chromium-driver \
-    # Additional dependencies for video processing
+    # Video processing dependencies
     libavcodec-extra \
     libavformat-dev \
     libswscale-dev \
@@ -51,13 +51,20 @@ RUN apt-get update && \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
+    # Additional dependencies for yt-dlp
+    python3-pip \
+    aria2 \
+    atomicparsley \
+    rtmpdump \
     # Cleanup
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Set Chrome and ChromeDriver paths
-ENV CHROME_BIN=/usr/bin/chromium \
-    CHROMEDRIVER_PATH=/usr/bin/chromedriver
+# Set up Chrome and ChromeDriver
+ENV CHROME_BIN=/usr/bin/google-chrome \
+    CHROME_PATH=/usr/bin/google-chrome \
+    CHROMEDRIVER_PATH=/usr/bin/chromedriver \
+    DISPLAY=:99
 
 # Set working directory
 WORKDIR /app
@@ -68,6 +75,8 @@ COPY requirements.txt .
 # Install Python dependencies with optimizations
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
+    # Install latest yt-dlp directly
+    pip install --no-cache-dir --upgrade yt-dlp && \
     # Clean up pip cache
     rm -rf /root/.cache/pip/* && \
     # Pre-compile Python files
@@ -80,6 +89,7 @@ RUN mkdir -p \
     /home/app_user/.cache/youtube-dl \
     /home/app_user/.cache/selenium \
     /home/app_user/.config/chromium \
+    /home/app_user/.config/google-chrome \
     /app/credentials \
     /app/analysis_temp \
     /app/sample_generated_videos \
@@ -115,7 +125,6 @@ USER app_user
 
 # Set environment variables for the application
 ENV HOME=/home/app_user \
-    DISPLAY=:99 \
     PYTHONPATH=${PYTHONPATH}:/app \
     SELENIUM_CACHE_PATH=/home/app_user/.cache/selenium \
     LC_ALL=C.UTF-8 \
@@ -124,7 +133,10 @@ ENV HOME=/home/app_user \
     OPENCV_FFMPEG_CAPTURE_OPTIONS="video_codec;h264_cuvid" \
     OPENCV_VIDEOIO_PRIORITY_BACKEND=2 \
     # FFmpeg optimizations
-    FFREPORT=file=/app/analysis_temp/ffmpeg-%p-%t.log
+    FFREPORT=file=/app/analysis_temp/ffmpeg-%p-%t.log \
+    # Chrome/Selenium settings
+    SELENIUM_HEADLESS=true \
+    PYTHONWARNINGS="ignore:Unverified HTTPS request"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
